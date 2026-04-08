@@ -93,13 +93,26 @@ export function eventsToGraph(events: ClaudeEvent[]): {
     data: item.data,
   }));
 
-  const edges: Edge[] = graphItems.slice(0, -1).map((item, index) => ({
-    id: `e-${index}`,
-    source: item.id,
-    target: graphItems[index + 1].id,
-    type: "default",
-    style: { stroke: "#30363d", strokeWidth: 1.5 },
-  }));
+  // Compute which tool_use_ids have a matching PostToolUse (completed)
+  const completedIds = new Set(
+    events
+      .filter(e => e.hook_event_name === "PostToolUse")
+      .map(e => (e as PostToolUseEvent).tool_use_id)
+  );
+
+  const edges: Edge[] = graphItems.slice(0, -1).map((item, index) => {
+    // Extract tool_use_id from nodes whose id starts with "tool-"
+    const toolUseId = item.id.startsWith("tool-") ? item.id.slice(5) : null;
+    const isActive = toolUseId ? !completedIds.has(toolUseId) : false;
+
+    return {
+      id: `e-${index}`,
+      source: item.id,
+      target: graphItems[index + 1].id,
+      type: "animated",
+      data: { kind: "dispatch", isActive },
+    };
+  });
 
   return { nodes, edges };
 }

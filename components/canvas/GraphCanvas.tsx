@@ -10,12 +10,17 @@ import {
 import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
 import OrbNode from "@/components/graph/OrbNode";
+import AnimatedEdge from "@/components/graph/AnimatedEdge";
 
 // Defined outside component — stable reference required by React Flow
 const nodeTypes = {
   toolcall:     OrbNode,
   notification: OrbNode,
   stop:         OrbNode,
+};
+
+const edgeTypes = {
+  animated: AnimatedEdge,
 };
 
 export interface SelectedNode {
@@ -56,6 +61,7 @@ function FlowCanvas({ events, sessionId, onNodeSelect }: FlowCanvasProps) {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       colorMode="dark"
       style={{ background: "transparent" }}
       onNodeClick={(_, node) =>
