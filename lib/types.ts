@@ -39,3 +39,9 @@ export type ClaudeEvent =
   | PostToolUseEvent
   | NotificationEvent
   | StopEvent;
+
+// Client-side wrapper — not a wire type
+export interface SessionEvent {
+  event: ClaudeEvent;
+  isSubagent: boolean;
+}
