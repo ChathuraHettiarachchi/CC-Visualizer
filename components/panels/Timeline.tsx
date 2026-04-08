@@ -23,47 +23,32 @@ function eventLabel(event: ClaudeEvent): string {
 }
 
 function eventColor(event: ClaudeEvent): string {
-  if (event.hook_event_name === "PreToolUse") return "#1f6feb";
-  if (event.hook_event_name === "PostToolUse") return "#3fb950";
-  if (event.hook_event_name === "Notification") return "#d29922";
-  return "#8b949e";
+  if (event.hook_event_name === "PreToolUse") return "var(--accent)";
+  if (event.hook_event_name === "PostToolUse") return "var(--accent-2)";
+  if (event.hook_event_name === "Notification") return "var(--warn)";
+  return "var(--muted)";
 }
 
 export default function Timeline({ events, selectedNode }: TimelineProps) {
   const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", fontFamily: "monospace" }}>
-      <div
-        style={{
-          padding: "8px 16px 4px",
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#8b949e",
-          textTransform: "uppercase",
-          letterSpacing: 1,
-          position: "sticky",
-          top: 0,
-          background: "#161b22",
-        }}
-      >
-        Timeline
-      </div>
-      {sorted.map((event, i) => {
+    <div style={{ flex: 1, overflowY: "auto", fontFamily: "var(--font-ibm-plex-mono), monospace" }}>
+      {sorted.map((event) => {
         const selected = isSelected(event, selectedNode);
         return (
           <div
-            key={i}
+            key={event.timestamp + event.hook_event_name}
             style={{
               padding: "5px 16px",
               display: "flex",
               gap: 10,
               alignItems: "flex-start",
               background: selected ? "rgba(31,111,235,0.1)" : "transparent",
-              borderLeft: `2px solid ${selected ? "#1f6feb" : "transparent"}`,
+              borderLeft: `2px solid ${selected ? "var(--accent)" : "transparent"}`,
             }}
           >
-            <span style={{ color: "#8b949e", flexShrink: 0, fontSize: 10 }}>
+            <span style={{ color: "var(--muted)", flexShrink: 0, fontSize: 10 }}>
               {new Date(event.timestamp).toLocaleTimeString()}
             </span>
             <span style={{ color: eventColor(event), fontSize: 11, wordBreak: "break-word" }}>

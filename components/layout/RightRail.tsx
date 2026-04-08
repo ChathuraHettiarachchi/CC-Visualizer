@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ClaudeEvent } from "@/lib/types";
 import type { SelectedNode } from "@/components/canvas/GraphCanvas";
 import InspectorPanel from "@/components/panels/InspectorPanel";
@@ -10,7 +11,7 @@ interface RightRailProps {
   onClose: () => void;
 }
 
-function RailPanel({ eyebrow, children, flex }: { eyebrow: string; children: React.ReactNode; flex?: number }) {
+function RailPanel({ eyebrow, children, flex }: { eyebrow: string; children: ReactNode; flex?: number }) {
   return (
     <div className="glass" style={{
       padding: 16,
