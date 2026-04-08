@@ -5,6 +5,7 @@ export interface SessionInfo {
   id: string;
   label: string;
   lastSeen: number;
+  subagentCount: number;
 }
 
 export function useSSE() {
@@ -26,7 +27,7 @@ export function useSSE() {
 
       if (!sessionMap.current.has(session_id)) {
         const label = `Session ${sessionMap.current.size + 1}`;
-        sessionMap.current.set(session_id, { id: session_id, label, lastSeen: timestamp });
+        sessionMap.current.set(session_id, { id: session_id, label, lastSeen: timestamp, subagentCount: 0 });
       } else {
         sessionMap.current.get(session_id)!.lastSeen = timestamp;
       }
