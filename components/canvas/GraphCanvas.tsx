@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import "@xyflow/react/dist/style.css";
 import {
   ReactFlow,
@@ -9,12 +10,31 @@ import {
   Controls,
   MiniMap,
 } from "@xyflow/react";
+import type { ClaudeEvent } from "@/lib/types";
+import { eventsToGraph } from "@/lib/events-to-graph";
+import ToolCallNode from "@/components/graph/ToolCallNode";
+import NotificationNode from "@/components/graph/NotificationNode";
+import StopNode from "@/components/graph/StopNode";
 
-function FlowCanvas() {
+// Defined outside component — stable reference required by React Flow
+const nodeTypes = {
+  toolcall: ToolCallNode,
+  notification: NotificationNode,
+  stop: StopNode,
+};
+
+interface FlowCanvasProps {
+  events: ClaudeEvent[];
+}
+
+function FlowCanvas({ events }: FlowCanvasProps) {
+  const { nodes, edges } = useMemo(() => eventsToGraph(events), [events]);
+
   return (
     <ReactFlow
-      nodes={[]}
-      edges={[]}
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
       fitView
       colorMode="dark"
       style={{ backgroundColor: "var(--background)" }}
@@ -42,10 +62,14 @@ function FlowCanvas() {
   );
 }
 
-export default function GraphCanvas() {
+interface GraphCanvasProps {
+  events: ClaudeEvent[];
+}
+
+export default function GraphCanvas({ events }: GraphCanvasProps) {
   return (
     <ReactFlowProvider>
-      <FlowCanvas />
+      <FlowCanvas events={events} />
     </ReactFlowProvider>
   );
 }

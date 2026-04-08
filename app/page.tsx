@@ -6,7 +6,7 @@ import GraphCanvas from "@/components/canvas/GraphCanvas";
 import { useSSE } from "@/hooks/useSSE";
 
 export default function Home() {
-  const { sessions } = useSSE();
+  const { sessions, sessionEvents } = useSSE();
   const [activeId, setActiveId] = useState<string>("");
 
   const tabSessions: Session[] =
@@ -31,7 +31,7 @@ export default function Home() {
         onSelect={(id) => { if (id !== "__none") setActiveId(id); }}
       />
       <div className="flex-1 relative">
-        <GraphCanvas />
+        <GraphCanvas events={sessionEvents.get(activeId) ?? []} />
       </div>
     </>
   );
