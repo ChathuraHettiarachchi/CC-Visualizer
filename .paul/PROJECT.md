@@ -22,14 +22,15 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 - [x] Project scaffold — Next.js 16 + TypeScript + Tailwind v4 — Phase 1
 - [x] React Flow canvas — @xyflow/react integrated, pan/zoom working — Phase 1
 - [x] Dark developer-tool shell — header, session tabs, canvas layout — Phase 1
+- [x] Claude Code hooks — HTTP hook server receiving events, SSE stream to browser — Phase 2
+- [x] Auto-detect Claude Code sessions — unique session_ids → tab per session, live in UI — Phase 2
+- [x] JSONL replay — load past sessions without Claude Code running — Phase 2
 
 ### Active (In Progress)
-- [ ] Claude Code hooks — lightweight HTTP hook server for zero-latency event streaming
-- [ ] Auto-detect Claude Code sessions — discover active sessions in workspace, stream events
+- [ ] Live agent visualization — interactive node graph with real-time tool calls, branching, return flows
+- [ ] Multi-session support — per-session event filtering driving graph state
 
 ### Planned (Next)
-- [ ] Live agent visualization — interactive node graph with real-time tool calls, branching, return flows
-- [ ] Multi-session support — track concurrent agent sessions with tabs
 - [ ] Interactive canvas — pan, zoom, click agents and tool calls to inspect details
 - [ ] Timeline & transcript panels — full execution timeline, file attention heatmap, message transcript
 
@@ -64,6 +65,10 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 | npm over pnpm | pnpm not installed on machine | 2026-04-08 | Active |
 | App in cc-visualizer/ subdir | Parent dir "AI" is invalid npm package name | 2026-04-08 | Active |
 | Always-dark theme via CSS vars | Developer tool — no light mode needed | 2026-04-08 | Active |
+| SSE via ReadableStream (Web Streams) | Native in Next.js 16, no extra deps | 2026-04-08 | Active |
+| globalThis.__eventBus singleton | Survives Next.js HMR — ??= prevents double-init | 2026-04-08 | Active |
+| Two EventSource connections (Header + page) | Simpler than prop-drilling; local tool won't notice overhead | 2026-04-08 | Active |
+| useRef for sessionMap in useSSE | Avoids stale closure re-renders on every SSE message | 2026-04-08 | Active |
 
 ## Success Metrics
 
@@ -74,4 +79,4 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-04-08 after Phase 1*
+*Last updated: 2026-04-08 after Phase 2*

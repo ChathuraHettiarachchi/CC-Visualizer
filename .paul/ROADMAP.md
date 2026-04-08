@@ -8,14 +8,14 @@ Build a real-time Claude Code session visualizer — HTTP hook server for zero-l
 
 **v0.1 Initial Release** (v0.1.0)
 Status: In progress
-Phases: 1 of 4 complete
+Phases: 2 of 4 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 1 | Foundation | 1 | ✅ Complete | 2026-04-08 |
-| 2 | Event Ingestion | 2 | Not started | - |
+| 2 | Event Ingestion | 2 | ✅ Complete | 2026-04-08 |
 | 3 | Graph Engine | 2 | Not started | - |
 | 4 | Inspection Panels | 2 | Not started | - |
 
@@ -50,8 +50,8 @@ Phases: 1 of 4 complete
 - JSONL log file replay support
 
 **Plans:**
-- [ ] 02-01: Hook server + SSE broadcast
-- [ ] 02-02: Session management + JSONL replay
+- [x] 02-01: Hook server + SSE broadcast
+- [x] 02-02: Session management + JSONL replay
 
 ### Phase 3: Graph Engine
 
@@ -87,4 +87,4 @@ Phases: 1 of 4 complete
 
 ---
 *Roadmap created: 2026-04-08*
-*Last updated: 2026-04-08*
+*Last updated: 2026-04-08 — Phase 2 complete*
