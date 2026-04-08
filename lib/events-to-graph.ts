@@ -106,7 +106,7 @@ export function eventsToGraph(events: ClaudeEvent[]): {
     const isActive = toolUseId ? !completedIds.has(toolUseId) : false;
 
     return {
-      id: `e-${index}`,
+      id: `e-${item.id}__${graphItems[index + 1].id}`,
       source: item.id,
       target: graphItems[index + 1].id,
       type: "animated",

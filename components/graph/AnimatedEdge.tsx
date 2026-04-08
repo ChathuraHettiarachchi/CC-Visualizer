@@ -51,8 +51,6 @@ export default memo(function AnimatedEdge({
       {/* Particle — only when active */}
       {isActive && (
         <circle r={4} fill={color} style={{ filter: `drop-shadow(0 0 6px ${color})` }}>
-          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-          {/* @ts-ignore — animateMotion is valid SVG but not in React's JSX types */}
           <animateMotion dur="1.7s" repeatCount="indefinite" rotate="auto">
             <mpath href={`#${pathId}`} />
           </animateMotion>
