@@ -1,17 +1,62 @@
 @import "tailwindcss";
 
+/* ─── Design tokens ──────────────────────────────── */
 :root {
-  --background: #0d1117;
-  --foreground: #e6edf3;
-  --header-bg: #161b22;
-  --border: #30363d;
-  --accent: #1f6feb;
+  --bg:           #07111f;
+  --bg-alt:       #0e1b31;
+  --panel:        rgba(10, 22, 40, 0.86);
+  --panel-strong: rgba(12, 27, 51, 0.96);
+  --line:         rgba(140, 194, 255, 0.18);
+  --line-strong:  rgba(140, 194, 255, 0.4);
+  --text:         #edf5ff;
+  --muted:        #91a8c7;
+  --accent:       #61d0ff;
+  --accent-2:     #7cf3c8;
+  --warn:         #ffbf69;
+  --danger:       #ff7a90;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  height: 100vh;
+/* ─── Base ───────────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
   overflow: hidden;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124,243,200,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 80% 85%, rgba(97,208,255,0.16)  0%, transparent 60%),
+    linear-gradient(160deg, #040a13 0%, #07111f 52%, #050913 100%);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+/* ─── Glass panel ────────────────────────────────── */
+.glass {
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+
+/* ─── Eyebrow label ──────────────────────────────── */
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+/* ─── Orb pulse animation ────────────────────────── */
+@keyframes orbPulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.58; }
+  50%       { transform: scale(1.04); opacity: 0.95; }
+}
+
+/* ─── Edge breath animation ──────────────────────── */
+@keyframes edgeBreath {
+  0%, 100% { opacity: 0.46; }
+  50%       { opacity: 1;    }
 }
