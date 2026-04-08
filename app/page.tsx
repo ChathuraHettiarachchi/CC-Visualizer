@@ -8,6 +8,7 @@ import { useSSE } from "@/hooks/useSSE";
 export default function Home() {
   const { sessions, sessionEvents } = useSSE();
   const [activeId, setActiveId] = useState<string>("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const tabSessions: Session[] =
     sessions.length > 0
@@ -23,6 +24,10 @@ export default function Home() {
     }
   }, [sessions, activeId]);
 
+  useEffect(() => {
+    setSelectedNodeId(null);
+  }, [activeId]);
+
   return (
     <>
       <SessionTabs
@@ -31,7 +36,11 @@ export default function Home() {
         onSelect={(id) => { if (id !== "__none") setActiveId(id); }}
       />
       <div className="flex-1 relative">
-        <GraphCanvas events={sessionEvents.get(activeId) ?? []} />
+        <GraphCanvas
+          events={sessionEvents.get(activeId) ?? []}
+          sessionId={activeId}
+          onNodeSelect={setSelectedNodeId}
+        />
       </div>
     </>
   );

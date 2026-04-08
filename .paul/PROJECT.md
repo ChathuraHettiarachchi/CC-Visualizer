@@ -25,14 +25,17 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 - [x] Claude Code hooks — HTTP hook server receiving events, SSE stream to browser — Phase 2
 - [x] Auto-detect Claude Code sessions — unique session_ids → tab per session, live in UI — Phase 2
 - [x] JSONL replay — load past sessions without Claude Code running — Phase 2
+- [x] Live agent visualization — ToolCall/Notification/Stop nodes render live from SSE events — Phase 3
+- [x] Multi-session support — per-session event filtering, tab switching updates graph — Phase 3
+- [x] Interactive canvas — pan, zoom, click-to-select nodes with accent highlight — Phase 3
 
 ### Active (In Progress)
-- [ ] Live agent visualization — interactive node graph with real-time tool calls, branching, return flows
-- [ ] Multi-session support — per-session event filtering driving graph state
+- [ ] Click-to-inspect detail panels — selected node shows tool input/output, message content
+- [ ] Timeline panel — full execution history with timestamps
 
 ### Planned (Next)
-- [ ] Interactive canvas — pan, zoom, click agents and tool calls to inspect details
-- [ ] Timeline & transcript panels — full execution timeline, file attention heatmap, message transcript
+- [ ] Transcript panel — message content viewer
+- [ ] File attention heatmap — which files were touched most
 
 ### Out of Scope
 - [ ] General AI workflow builder (not agent-flow replacement, focused on Claude Code specifically)
@@ -69,6 +72,9 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 | globalThis.__eventBus singleton | Survives Next.js HMR — ??= prevents double-init | 2026-04-08 | Active |
 | Two EventSource connections (Header + page) | Simpler than prop-drilling; local tool won't notice overhead | 2026-04-08 | Active |
 | useRef for sessionMap in useSSE | Avoids stale closure re-renders on every SSE message | 2026-04-08 | Active |
+| nodeTypes outside component | Stable reference prevents React Flow remounting nodes | 2026-04-08 | Active |
+| Imperative fitView via useReactFlow | fitView prop resets camera on every render; imperative fires only on session change | 2026-04-08 | Active |
+| Inline styles on custom nodes | Tailwind unreliable inside React Flow canvas DOM | 2026-04-08 | Active |
 
 ## Success Metrics
 
@@ -79,4 +85,4 @@ Developers can see their Claude Code agent sessions visualized in real-time — 
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-04-08 after Phase 2*
+*Last updated: 2026-04-08 after Phase 3*

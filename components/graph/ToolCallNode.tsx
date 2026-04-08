@@ -17,14 +17,14 @@ function inputPreview(toolInput: Record<string, unknown>): string {
   return line.length > 60 ? line.slice(0, 57) + "..." : line;
 }
 
-export default function ToolCallNode({ data }: { data: ToolCallNodeData }) {
+export default function ToolCallNode({ data, selected }: { data: ToolCallNodeData; selected?: boolean }) {
   const preview = inputPreview(data.toolInput);
 
   return (
     <div
       style={{
         background: "#161b22",
-        border: "1px solid #30363d",
+        border: `1px solid ${selected ? "#1f6feb" : "#30363d"}`,
         borderRadius: 6,
         padding: "10px 14px",
         minWidth: 220,

@@ -5,14 +5,14 @@ interface StopNodeData {
   timestamp: number;
 }
 
-export default function StopNode({ data }: { data: StopNodeData }) {
+export default function StopNode({ data, selected }: { data: StopNodeData; selected?: boolean }) {
   const label = data.eventType === "Stop" ? "Session complete" : "Subagent complete";
 
   return (
     <div
       style={{
         background: "#161b22",
-        border: "1px solid #30363d",
+        border: `1px solid ${selected ? "#1f6feb" : "#30363d"}`,
         borderRadius: 6,
         padding: "10px 14px",
         minWidth: 220,

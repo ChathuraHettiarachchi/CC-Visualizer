@@ -5,14 +5,14 @@ interface NotificationNodeData {
   timestamp: number;
 }
 
-export default function NotificationNode({ data }: { data: NotificationNodeData }) {
+export default function NotificationNode({ data, selected }: { data: NotificationNodeData; selected?: boolean }) {
   const msg = data.message.length > 100 ? data.message.slice(0, 97) + "..." : data.message;
 
   return (
     <div
       style={{
         background: "#161b22",
-        border: "1px solid #30363d",
+        border: `1px solid ${selected ? "#1f6feb" : "#30363d"}`,
         borderRadius: 6,
         padding: "10px 14px",
         minWidth: 220,

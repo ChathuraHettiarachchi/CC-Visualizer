@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import "@xyflow/react/dist/style.css";
 import {
   ReactFlow,
@@ -9,6 +9,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  useReactFlow,
 } from "@xyflow/react";
 import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
@@ -25,19 +26,39 @@ const nodeTypes = {
 
 interface FlowCanvasProps {
   events: ClaudeEvent[];
+  sessionId: string;
+  onNodeSelect?: (nodeId: string) => void;
 }
 
-function FlowCanvas({ events }: FlowCanvasProps) {
+function FlowCanvas({ events, sessionId, onNodeSelect }: FlowCanvasProps) {
+  const { fitView } = useReactFlow();
   const { nodes, edges } = useMemo(() => eventsToGraph(events), [events]);
+  const prevSessionId = useRef<string>("");
+  const hasFitted = useRef(false);
+
+  useEffect(() => {
+    if (nodes.length === 0) {
+      hasFitted.current = false;
+      return;
+    }
+    const sessionChanged = sessionId !== prevSessionId.current;
+    const firstNodes = !hasFitted.current;
+    if (sessionChanged || firstNodes) {
+      prevSessionId.current = sessionId;
+      hasFitted.current = true;
+      const t = setTimeout(() => fitView({ duration: 300, padding: 0.2 }), 50);
+      return () => clearTimeout(t);
+    }
+  }, [nodes.length, sessionId, fitView]);
 
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      fitView
       colorMode="dark"
       style={{ backgroundColor: "var(--background)" }}
+      onNodeClick={(_, node) => onNodeSelect?.(node.id)}
     >
       <Background
         variant={BackgroundVariant.Dots}
@@ -64,12 +85,14 @@ function FlowCanvas({ events }: FlowCanvasProps) {
 
 interface GraphCanvasProps {
   events: ClaudeEvent[];
+  sessionId: string;
+  onNodeSelect?: (nodeId: string) => void;
 }
 
-export default function GraphCanvas({ events }: GraphCanvasProps) {
+export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCanvasProps) {
   return (
     <ReactFlowProvider>
-      <FlowCanvas events={events} />
+      <FlowCanvas events={events} sessionId={sessionId} onNodeSelect={onNodeSelect} />
     </ReactFlowProvider>
   );
 }

@@ -8,7 +8,7 @@ Build a real-time Claude Code session visualizer — HTTP hook server for zero-l
 
 **v0.1 Initial Release** (v0.1.0)
 Status: In progress
-Phases: 2 of 4 complete
+Phases: 3 of 4 complete
 
 ## Phases
 
@@ -16,7 +16,7 @@ Phases: 2 of 4 complete
 |-------|------|-------|--------|-----------|
 | 1 | Foundation | 1 | ✅ Complete | 2026-04-08 |
 | 2 | Event Ingestion | 2 | ✅ Complete | 2026-04-08 |
-| 3 | Graph Engine | 2 | Not started | - |
+| 3 | Graph Engine | 2 | ✅ Complete | 2026-04-08 |
 | 4 | Inspection Panels | 2 | Not started | - |
 
 ## Phase Details
@@ -66,8 +66,8 @@ Phases: 2 of 4 complete
 - Pan, zoom, click-to-select interactions
 
 **Plans:**
-- [ ] 03-01: Node/edge types + static graph rendering
-- [ ] 03-02: Live SSE → graph state updates
+- [x] 03-01: Node/edge types + static graph rendering
+- [x] 03-02: Live SSE → graph state updates
 
 ### Phase 4: Inspection Panels
 
@@ -87,4 +87,4 @@ Phases: 2 of 4 complete
 
 ---
 *Roadmap created: 2026-04-08*
-*Last updated: 2026-04-08 — Phase 2 complete*
+*Last updated: 2026-04-08 — Phase 3 complete*

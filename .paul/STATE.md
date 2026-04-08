@@ -2,29 +2,29 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-04-08 after Phase 2)
+See: .paul/PROJECT.md (updated 2026-04-08 after Phase 3)
 
 **Core value:** Developers can see their Claude Code agent sessions visualized in real-time — watching agents think, branch, and coordinate as they work.
-**Current focus:** v0.1 — Phase 3: Graph Engine
+**Current focus:** v0.1 — Phase 4: Inspection Panels
 
 ## Current Position
 
 Milestone: v0.1 Initial Release
-Phase: 3 of 4 (Graph Engine) — In Progress
-Plan: 03-01 complete, 03-02 not started
-Status: Ready for next plan
-Last activity: 2026-04-08 — 03-01 UNIFY complete
+Phase: 4 of 4 (Inspection Panels) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-04-08 — Phase 3 complete, transitioned to Phase 4
 
 Progress:
-- Milestone: [██████░░░░] 62%
-- Phase 3: [█████░░░░░] 50%
+- Milestone: [████████░░] 75%
+- Phase 4: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete - ready for 03-02]
+  ○        ○        ○     [Ready to plan Phase 4]
 ```
 
 ## Accumulated Context
@@ -38,25 +38,27 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - SSE via Web Streams API (ReadableStream) — confirmed works in Next.js 16
 - Hook endpoints use `export const runtime = 'nodejs'` (EventEmitter not in Edge runtime)
 - Global singleton via `globalThis.__eventBus` — survives Next.js HMR
-- Two EventSource connections (Header + page) — acceptable for local dev tool
-- `useRef` for sessionMap in useSSE — avoids stale closure re-renders
+- nodeTypes defined outside component — stable reference prevents React Flow remounting
+- Imperative fitView via useReactFlow — fitView prop resets camera on every render
+- Inline styles on custom nodes — Tailwind unreliable inside React Flow canvas DOM
+- selectedNodeId in page.tsx state — ready for Phase 4 detail panels
 
 ### Deferred Issues
 None yet.
 
 ### Blockers/Concerns
-- Phase 3 graph engine needs per-session event filtering — useSSE currently exposes all sessions, not per-session event lists. Phase 3 plan must extend this.
+None.
 
 ### Git State
-Last commit: 6658ff9
+Last commit: e524da6
 Branch: main
 
 ## Session Continuity
 
 Last session: 2026-04-08
-Stopped at: 03-01 complete — nodes visible in canvas
-Next action: /paul:plan for 03-02 (Live SSE → graph state updates)
-Resume file: .paul/phases/03-graph-engine/03-01-SUMMARY.md
+Stopped at: Phase 3 complete, ready to plan Phase 4
+Next action: /paul:plan for Phase 4 (Inspection Panels)
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*
