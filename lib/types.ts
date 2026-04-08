@@ -40,7 +40,9 @@ export type ClaudeEvent =
   | NotificationEvent
   | StopEvent;
 
-// Client-side wrapper — not a wire type
+// Client-side wrapper — not a wire type.
+// TODO: activate by changing eventsBySession to Map<string, SessionEvent[]> in useSSE
+// so consumers can distinguish subagent events from parent events.
 export interface SessionEvent {
   event: ClaudeEvent;
   isSubagent: boolean;

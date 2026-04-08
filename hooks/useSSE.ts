@@ -49,6 +49,9 @@ export function useSSE() {
       }
 
       // ── 2. New session — check if it's a subagent ────────────────────
+      // Note: pending is only consumed when a genuinely new session_id appears
+      // within 5s. Already-known sessions skip this block entirely, keeping
+      // pending alive for the actual subagent session that follows.
       const isKnownSession =
         sessionMap.current.has(session_id) ||
         parentMap.current.has(session_id);
@@ -56,9 +59,13 @@ export function useSSE() {
       if (!isKnownSession && pending.current) {
         const delta = timestamp - pending.current.timestamp;
         if (delta >= 0 && delta < 5000) {
-          parentMap.current.set(session_id, pending.current.parentSessionId);
-          const parentInfo = sessionMap.current.get(pending.current.parentSessionId);
-          if (parentInfo) parentInfo.subagentCount += 1;
+          const parentId = pending.current.parentSessionId;
+          parentMap.current.set(session_id, parentId);
+          // Replace entry to make the mutation visible to consumers using object identity
+          const parentInfo = sessionMap.current.get(parentId);
+          if (parentInfo) {
+            sessionMap.current.set(parentId, { ...parentInfo, subagentCount: parentInfo.subagentCount + 1 });
+          }
           pending.current = null;
         }
       }
