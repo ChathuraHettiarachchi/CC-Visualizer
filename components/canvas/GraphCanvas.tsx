@@ -5,29 +5,29 @@ import "@xyflow/react/dist/style.css";
 import {
   ReactFlow,
   ReactFlowProvider,
-  Background,
-  BackgroundVariant,
-  Controls,
-  MiniMap,
   useReactFlow,
 } from "@xyflow/react";
 import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
-import ToolCallNode from "@/components/graph/ToolCallNode";
-import NotificationNode from "@/components/graph/NotificationNode";
-import StopNode from "@/components/graph/StopNode";
+import OrbNode from "@/components/graph/OrbNode";
 
 // Defined outside component — stable reference required by React Flow
 const nodeTypes = {
-  toolcall: ToolCallNode,
-  notification: NotificationNode,
-  stop: StopNode,
+  toolcall:     OrbNode,
+  notification: OrbNode,
+  stop:         OrbNode,
 };
+
+export interface SelectedNode {
+  id: string;
+  type: string | undefined;
+  data: Record<string, unknown>;
+}
 
 interface FlowCanvasProps {
   events: ClaudeEvent[];
   sessionId: string;
-  onNodeSelect?: (nodeId: string) => void;
+  onNodeSelect?: (node: SelectedNode) => void;
 }
 
 function FlowCanvas({ events, sessionId, onNodeSelect }: FlowCanvasProps) {
@@ -57,36 +57,18 @@ function FlowCanvas({ events, sessionId, onNodeSelect }: FlowCanvasProps) {
       edges={edges}
       nodeTypes={nodeTypes}
       colorMode="dark"
-      style={{ backgroundColor: "var(--background)" }}
-      onNodeClick={(_, node) => onNodeSelect?.(node.id)}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        color="#30363d"
-        gap={24}
-        size={1.5}
-      />
-      <Controls
-        style={{
-          backgroundColor: "var(--header-bg)",
-          border: "1px solid var(--border)",
-        }}
-      />
-      <MiniMap
-        style={{
-          backgroundColor: "var(--header-bg)",
-          border: "1px solid var(--border)",
-        }}
-        maskColor="rgba(13,17,23,0.7)"
-      />
-    </ReactFlow>
+      style={{ background: "transparent" }}
+      onNodeClick={(_, node) =>
+        onNodeSelect?.({ id: node.id, type: node.type, data: node.data as Record<string, unknown> })
+      }
+    />
   );
 }
 
 interface GraphCanvasProps {
   events: ClaudeEvent[];
   sessionId: string;
-  onNodeSelect?: (nodeId: string) => void;
+  onNodeSelect?: (node: SelectedNode) => void;
 }
 
 export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCanvasProps) {
