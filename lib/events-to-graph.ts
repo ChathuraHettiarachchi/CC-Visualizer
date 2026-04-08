@@ -5,7 +5,9 @@ import type {
   PostToolUseEvent,
 } from "@/lib/types";
 
-const NODE_SPACING = 140;
+const COLS = 5;
+const SPACING_X = 170;
+const SPACING_Y = 200;
 
 interface ToolCallEntry {
   pre: PreToolUseEvent;
@@ -86,12 +88,14 @@ export function eventsToGraph(events: ClaudeEvent[]): {
     }
   });
 
-  const nodes: Node[] = graphItems.map((item, index) => ({
-    id: item.id,
-    type: item.type,
-    position: { x: 0, y: index * NODE_SPACING },
-    data: item.data,
-  }));
+  const nodes: Node[] = graphItems.map((item, index) => {
+    const col = index % COLS;
+    const row = Math.floor(index / COLS);
+    // Snake: even rows left-to-right, odd rows right-to-left
+    const x = (row % 2 === 0) ? col * SPACING_X : (COLS - 1 - col) * SPACING_X;
+    const y = row * SPACING_Y;
+    return { id: item.id, type: item.type, position: { x, y }, data: item.data };
+  });
 
   // Compute which tool_use_ids have a matching PostToolUse (completed)
   const completedIds = new Set(
