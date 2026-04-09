@@ -219,6 +219,10 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   const fgRef = useRef<ForceGraphMethods>(undefined);
   const flyToStart = useRef(false);
 
+  // Stable ref for the callback so effects don't need it as a dep (avoids infinite re-render)
+  const onNodeSelectRef = useRef(onNodeSelect);
+  useEffect(() => { onNodeSelectRef.current = onNodeSelect; });
+
   useEffect(() => {
     flyToStart.current = true;
     setFollowMode(false);
@@ -265,7 +269,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     const count = orderedPlaybackNodes.length;
     if (followMode && count > prevNodeCountRef.current && count > 0) {
       const node = orderedPlaybackNodes[count - 1] as Record<string, unknown>;
-      onNodeSelect?.({
+      onNodeSelectRef.current?.({
         id:   node.id as string,
         type: node.type as string | undefined,
         data: (node.data as Record<string, unknown>) ?? {},
@@ -279,7 +283,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       }
     }
     prevNodeCountRef.current = count;
-  }, [orderedPlaybackNodes, followMode, onNodeSelect]);
+  }, [orderedPlaybackNodes, followMode]);
 
   // Advance playback: fly to node, select it, then advance after delay
   useEffect(() => {
@@ -289,7 +293,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       return;
     }
     const node = orderedPlaybackNodes[playbackIdx] as Record<string, unknown>;
-    onNodeSelect?.({
+    onNodeSelectRef.current?.({
       id:   node.id as string,
       type: node.type as string | undefined,
       data: (node.data as Record<string, unknown>) ?? {},
@@ -309,7 +313,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       Math.round(2200 / replaySpeed)
     );
     return () => clearTimeout(timer);
-  }, [playbackIdx, orderedPlaybackNodes, onNodeSelect, replaySpeed]);
+  }, [playbackIdx, orderedPlaybackNodes, replaySpeed]);
 
   // ── Export ────────────────────────────────────────────────────────────────
   function exportPNG() {
