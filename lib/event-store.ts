@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import type { ClaudeEvent } from "./types";
+import { appendEvent as persistEvent } from "@/lib/session-store";
 
 const RING_BUFFER_MAX = 500;
 
@@ -24,5 +25,6 @@ export function pushEvent(event: ClaudeEvent): void {
   if (events.length > RING_BUFFER_MAX) {
     events.splice(0, 1);
   }
+  persistEvent(event);
   eventBus.emit("event", event);
 }
