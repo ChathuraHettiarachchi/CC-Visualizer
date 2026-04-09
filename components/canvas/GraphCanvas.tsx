@@ -195,7 +195,9 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
   // Clear accumulated start-node pulse meshes when graph rebuilds
   useEffect(() => {
+    startPulseMeshes.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
     startPulseMeshes.length = 0;
+    statusRingMeshes.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
     statusRingMeshes.length = 0;
   }, [events]);
 
