@@ -6,6 +6,7 @@ import type { ClaudeEvent } from "@/lib/types";
 import type { SessionMeta } from "@/lib/session-store";
 import AgentSkillPanel from "@/components/panels/AgentSkillPanel";
 import WaterfallPanel from "@/components/panels/WaterfallPanel";
+import PatternPanel from "@/components/panels/PatternPanel";
 import { estimateContextUsage } from "@/lib/context-estimate";
 
 interface LeftRailProps {
@@ -19,6 +20,7 @@ interface LeftRailProps {
   onLoadSaved: (meta: SessionMeta) => void;
   onDeleteSaved: (id: string) => void;
   activeSavedId: string | null;
+  onNodeClick: (nodeId: string) => void;
 }
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-ibm-plex-mono), monospace" };
@@ -40,7 +42,7 @@ function sessionStats(evts: ClaudeEvent[]) {
 
 export default function LeftRail({
   sessions, activeId, onSelect, events, sessionEvents, childSessions,
-  savedSessions, onLoadSaved, onDeleteSaved, activeSavedId,
+  savedSessions, onLoadSaved, onDeleteSaved, activeSavedId, onNodeClick,
 }: LeftRailProps) {
   const [tab, setTab] = useState<"live" | "history">("live");
   // Estimate token usage from raw event payload sizes (4 chars ≈ 1 token)
@@ -246,6 +248,16 @@ export default function LeftRail({
           <div style={EYEBROW}>Waterfall</div>
           <div style={{ marginTop: 8 }}>
             <WaterfallPanel events={events} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Patterns ───────────────────────────────────────────── */}
+      {events.some(e => e.hook_event_name === "PreToolUse") && (
+        <div className="glass" style={{ padding: 14, flexShrink: 0 }}>
+          <div style={EYEBROW}>Patterns</div>
+          <div style={{ marginTop: 8 }}>
+            <PatternPanel events={events} onNodeClick={onNodeClick} />
           </div>
         </div>
       )}

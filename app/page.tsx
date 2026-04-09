@@ -92,6 +92,7 @@ export default function Home() {
         onLoadSaved={loadSavedSession}
         onDeleteSaved={removeSaved}
         activeSavedId={savedSession?.meta.id ?? null}
+        onNodeClick={selectNodeById}
       />
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", borderRadius: 16 }}>
         {isReadOnly && (
