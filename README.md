@@ -26,8 +26,8 @@ npx cc-visualizer
 
 This will:
 1. Install Claude Code hooks into `~/.claude/settings.json` (PreToolUse, PostToolUse, Notification, Stop, SubagentStop)
-2. Start the visualizer server on port 3000
-3. Open `http://localhost:3000` in your browser
+2. Start the visualizer server on port 3773
+3. Open `http://localhost:3773` in your browser
 
 Then run Claude Code anywhere — events stream in live.
 
@@ -45,7 +45,7 @@ npx cc-visualizer --uninstall   # remove cc-visualizer hooks and exit
 The CLI appends one `curl` command to each Claude hook event in your settings:
 
 ```sh
-curl -sf -X POST http://localhost:3000/api/hooks \
+curl -sf -X POST http://localhost:3773/api/hooks \
   -H 'Content-Type: application/json' \
   --data-binary @- --max-time 2 2>/dev/null || true
 ```
@@ -259,7 +259,7 @@ npm install
 npm run dev
 ```
 
-The dev server starts at `http://localhost:3000`. To send test events without running Claude Code, POST to `/api/hooks` with a JSON body matching the `ClaudeEvent` shape in `lib/types.ts`.
+The dev server starts at `http://localhost:3773`. To send test events without running Claude Code, POST to `/api/hooks` with a JSON body matching the `ClaudeEvent` shape in `lib/types.ts`.
 
 ---
 
