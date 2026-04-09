@@ -202,23 +202,37 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     statusRingMeshesRef.current = [];
   }, [events]);
 
+  // ── Search — declared here so graphData useMemo can depend on it ──────────
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Convert events → 3D graph data
+  // searchQuery is included as a dep so graphData changes when the query changes,
+  // which forces ForceGraph3D to re-evaluate nodeColor for every node.
   const graphData = useMemo(() => {
     const { nodes, edges } = eventsToGraph(events);
     return {
-      nodes: nodes.map((n) => ({
-        id:      n.id,
-        type:    n.type,
-        data:    n.data,
-        isStart: (n.data as Record<string, unknown>)?.isStart ?? false,
-      })),
+      nodes: nodes.map((n) => {
+        const label = n.type === "toolcall"
+          ? ((n.data as Record<string, unknown>)?.toolName as string) ?? "tool"
+          : n.type ?? "";
+        const dimmed = searchQuery
+          ? !label.toLowerCase().includes(searchQuery.toLowerCase())
+          : false;
+        return {
+          id:      n.id,
+          type:    n.type,
+          data:    n.data,
+          isStart: (n.data as Record<string, unknown>)?.isStart ?? false,
+          dimmed,
+        };
+      }),
       links: edges.map((e) => ({
         source:   e.source,
         target:   e.target,
         isActive: ((e.data as Record<string, unknown>)?.isActive ?? false) as boolean,
       })),
     };
-  }, [events]);
+  }, [events, searchQuery]);
 
   // After simulation settles, fly camera to the start node (set flag on session change)
   const fgRef = useRef<ForceGraphMethods>(undefined);
@@ -235,9 +249,6 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   }, [sessionId]);
 
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
-
-  // ── Search ────────────────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState("");
 
   // ── Heatmap ───────────────────────────────────────────────────────────────
   const [heatmapMode, setHeatmapMode] = useState(false);
@@ -381,11 +392,40 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     URL.revokeObjectURL(url);
   }
 
+  // Track whether the most recent selection originated inside the canvas so we
+  // can skip the camera fly for internal selections (user already sees the node).
+  const internalSelectRef = useRef(false);
+
+  // Fly camera / scroll 2D to whichever node is selected, but only when the
+  // selection came from outside the canvas (bookmarks, error log, arrow keys…).
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    if (internalSelectRef.current) {
+      internalSelectRef.current = false;
+      return;
+    }
+    if (view2D) {
+      // FlowView2D handles scroll via its selectedId prop — nothing extra needed
+      return;
+    }
+    const node = graphData.nodes.find(
+      (n) => (n as Record<string, unknown>).id === selectedNodeId
+    ) as Record<string, unknown> | undefined;
+    if (!node || node.x === undefined) return;
+    fgRef.current?.cameraPosition(
+      { x: (node.x as number) + 20, y: (node.y as number) + 20, z: (node.z as number) + 120 },
+      { x: node.x as number, y: node.y as number, z: node.z as number },
+      600
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId]);
+
   const handleNodeClick = useCallback(
     (node: Record<string, unknown>, event: MouseEvent) => {
       if (node.type === "__session_label") return;
       setPlaybackIdx(null);
       setFollowMode(false); // manual click exits follow mode
+      internalSelectRef.current = true; // mark as internal so fly is skipped
       const selected: SelectedNode = {
         id:   node.id as string,
         type: node.type as string | undefined,
@@ -414,6 +454,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       if (!targetNode) return;
       const n = targetNode as Record<string, unknown>;
       if (n.type === "__session_label") return;
+      internalSelectRef.current = true;
       onNodeSelect?.({
         id:   n.id as string,
         type: n.type as string | undefined,
@@ -519,9 +560,11 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
             events={events}
             heatmapMode={heatmapMode}
             searchQuery={searchQuery}
+            selectedId={selectedNodeId}
             onNodeClick={(id) => {
               const node = graphData.nodes.find(n => (n as Record<string, unknown>).id === id) as Record<string, unknown> | undefined;
               if (!node || node.type === "__session_label") return;
+              internalSelectRef.current = true;
               onNodeSelect?.({ id: id, type: node.type as string | undefined, data: (node.data as Record<string, unknown>) ?? {} });
             }}
           />
@@ -546,12 +589,8 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           } else {
             base = (node.sessionColor as string) ?? TYPE_COLOR[node.type as string] ?? "#61d0ff";
           }
-          if (!searchQuery || node.type === "__session_label") return base;
-          const label = node.type === "toolcall"
-            ? (((node.data as Record<string, unknown>)?.toolName as string) ?? "tool")
-            : (node.type as string);
-          const matches = label.toLowerCase().includes(searchQuery.toLowerCase());
-          return matches ? base : `${base}15`;
+          if (node.dimmed) return `${base}15`;
+          return base;
         }}
         nodeVal={(node: Record<string, unknown>) => {
           if (node.type === "__session_label") return 0;
