@@ -7,7 +7,6 @@ import type { SessionMeta } from "@/lib/session-store";
 import AgentSkillPanel from "@/components/panels/AgentSkillPanel";
 import WaterfallPanel from "@/components/panels/WaterfallPanel";
 import PatternPanel from "@/components/panels/PatternPanel";
-import { estimateContextUsage } from "@/lib/context-estimate";
 
 interface LeftRailProps {
   sessions: SessionInfo[];
@@ -45,50 +44,6 @@ export default function LeftRail({
   savedSessions, onLoadSaved, onDeleteSaved, activeSavedId, onNodeClick,
 }: LeftRailProps) {
   const [tab, setTab] = useState<"live" | "history">("live");
-  // Estimate token usage from raw event payload sizes (4 chars ≈ 1 token)
-  const { estInputTokens, estOutputTokens, estCostUsd } = (() => {
-    let inputChars = 0, outputChars = 0;
-    for (const e of events) {
-      if (e.hook_event_name === "PreToolUse") {
-        inputChars += JSON.stringify((e as { tool_input: unknown }).tool_input ?? {}).length;
-      } else if (e.hook_event_name === "PostToolUse") {
-        outputChars += String((e as { tool_response: unknown }).tool_response ?? "").length;
-      }
-    }
-    const inTok  = Math.round(inputChars  / 4);
-    const outTok = Math.round(outputChars / 4);
-    // Sonnet 4.x pricing: $3/M input, $15/M output
-    const cost   = (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
-    return { estInputTokens: inTok, estOutputTokens: outTok, estCostUsd: cost };
-  })();
-
-  function fmtTok(n: number) {
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return String(n);
-  }
-
-  const globalStats = [
-    { label: "Events",   value: events.length },
-    { label: "Tools",    value: events.filter(e => e.hook_event_name === "PreToolUse").length },
-    { label: "Sessions", value: sessions.length || "—" },
-    {
-      label: "Active",
-      value: (() => {
-        const pending = events.filter(e => e.hook_event_name === "PreToolUse");
-        const done = new Set(
-          events.filter(e => e.hook_event_name === "PostToolUse")
-            .map(e => (e as { tool_use_id: string }).tool_use_id)
-        );
-        const active = pending.find(e => !done.has((e as { tool_use_id: string }).tool_use_id));
-        return active ? (active as { tool_name: string }).tool_name : "—";
-      })(),
-    },
-    { label: "~In tok",  value: fmtTok(estInputTokens) },
-    { label: "~Out tok", value: fmtTok(estOutputTokens) },
-    { label: "~Cost",    value: estCostUsd < 0.01 ? "<$0.01" : `$${estCostUsd.toFixed(2)}` },
-  ];
-
-  const contextUsage = estimateContextUsage(events);
 
   return (
     // Full-height scrollable column
@@ -261,60 +216,6 @@ export default function LeftRail({
           </div>
         </div>
       )}
-
-      {/* ── Stats ──────────────────────────────────────────────── */}
-      <div className="glass" style={{ padding: 14, flexShrink: 0 }}>
-        <div style={EYEBROW}>Stats</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {globalStats.map(({ label, value }) => (
-            <div key={label} style={{
-              padding: 10, borderRadius: 12,
-              border: "1px solid var(--line)", background: "rgba(255,255,255,0.03)",
-            }}>
-              <div style={{
-                ...MONO,
-                fontSize: typeof value === "string" && value.length > 4 ? 13 : 20,
-                fontWeight: 700, color: "var(--text)", lineHeight: 1.1,
-                marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {value}
-              </div>
-              <div style={{
-                ...MONO, fontSize: 9, color: "var(--muted)",
-                textTransform: "uppercase", letterSpacing: "0.08em",
-              }}>
-                {label}
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* Context window bar */}
-        <div style={{ marginTop: 12 }}>
-          <div style={{
-            display: "flex", justifyContent: "space-between", alignItems: "baseline",
-            marginBottom: 5,
-          }}>
-            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
-              Context window
-            </span>
-            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)" }}>
-              ~{contextUsage.percentage}%
-            </span>
-          </div>
-          <div style={{ height: 4, background: "var(--line)", borderRadius: 2 }}>
-            <div style={{
-              height: "100%",
-              width: `${contextUsage.percentage}%`,
-              borderRadius: 2,
-              background: contextUsage.percentage < 60 ? "#22c55e" : contextUsage.percentage < 85 ? "#ffbf69" : "#f87171",
-              transition: "width 0.3s ease",
-            }} />
-          </div>
-          <div style={{ ...MONO, fontSize: 9, color: "rgba(140,194,255,0.35)", marginTop: 3 }}>
-            ~{(contextUsage.usedTokens / 1000).toFixed(1)}k / {(contextUsage.totalTokens / 1000).toFixed(0)}k tokens
-          </div>
-        </div>
-      </div>
 
     </div>
   );

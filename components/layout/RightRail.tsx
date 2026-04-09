@@ -11,6 +11,7 @@ import BookmarkPanel from "@/components/panels/BookmarkPanel";
 import DiffPanel from "@/components/panels/DiffPanel";
 import ErrorLogPanel from "@/components/panels/ErrorLogPanel";
 import { isBookmarked, addBookmark, removeBookmark } from "@/lib/bookmarks";
+import { estimateContextUsage } from "@/lib/context-estimate";
 
 interface RightRailProps {
   node: SelectedNode | null;
@@ -25,15 +26,13 @@ interface RightRailProps {
 const MONO: React.CSSProperties = { fontFamily: "var(--font-ibm-plex-mono), monospace" };
 
 function RailPanel({
-  eyebrow, children, flex, collapsible = false,
-}: { eyebrow: string; children: ReactNode; flex?: number; collapsible?: boolean }) {
+  eyebrow, children, collapsible = false,
+}: { eyebrow: string; children: ReactNode; collapsible?: boolean }) {
   const [open, setOpen] = useState(true);
 
   return (
     <div className="glass" style={{
-      padding: 16, display: "flex", flexDirection: "column",
-      overflow: "hidden", flex: open ? (flex ?? "none") : "none",
-      minHeight: 0, flexShrink: 0,
+      padding: 16, flexShrink: 0,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: open ? 10 : 0, flexShrink: 0 }}>
         <div className="eyebrow">{eyebrow}</div>
@@ -56,6 +55,39 @@ export default function RightRail({
 }: RightRailProps) {
   const [bookmarkRefresh, setBookmarkRefresh] = useState(0);
 
+  // ── Stats computation ──────────────────────────────────────────────
+  const { globalStats, contextUsage } = (() => {
+    let inputChars = 0, outputChars = 0;
+    for (const e of events) {
+      if (e.hook_event_name === "PreToolUse") {
+        inputChars += JSON.stringify((e as { tool_input: unknown }).tool_input ?? {}).length;
+      } else if (e.hook_event_name === "PostToolUse") {
+        outputChars += String((e as { tool_response: unknown }).tool_response ?? "").length;
+      }
+    }
+    const inTok  = Math.round(inputChars  / 4);
+    const outTok = Math.round(outputChars / 4);
+    const cost   = (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+    const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+    const pending = events.filter(e => e.hook_event_name === "PreToolUse");
+    const done = new Set(
+      events.filter(e => e.hook_event_name === "PostToolUse")
+        .map(e => (e as { tool_use_id: string }).tool_use_id)
+    );
+    const active = pending.find(e => !done.has((e as { tool_use_id: string }).tool_use_id));
+    return {
+      globalStats: [
+        { label: "Events",   value: events.length },
+        { label: "Tools",    value: pending.length },
+        { label: "Active",   value: active ? (active as { tool_name: string }).tool_name : "—" },
+        { label: "~Cost",    value: cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}` },
+        { label: "~In tok",  value: fmtTok(inTok) },
+        { label: "~Out tok", value: fmtTok(outTok) },
+      ] as Array<{ label: string; value: string | number }>,
+      contextUsage: estimateContextUsage(events),
+    };
+  })();
+
   const bookmarked = node ? isBookmarked(sessionId, node.id) : false;
 
   function toggleBookmark() {
@@ -74,15 +106,60 @@ export default function RightRail({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", height: "100%" }}>
 
+      {/* Stats */}
+      <RailPanel eyebrow="Stats" collapsible>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {globalStats.map(({ label, value }) => (
+            <div key={label} style={{
+              padding: 10, borderRadius: 12,
+              border: "1px solid var(--line)", background: "rgba(255,255,255,0.03)",
+            }}>
+              <div style={{
+                ...MONO,
+                fontSize: typeof value === "string" && value.length > 4 ? 13 : 20,
+                fontWeight: 700, color: "var(--text)", lineHeight: 1.1,
+                marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {value}
+              </div>
+              <div style={{ ...MONO, fontSize: 9, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Context window bar */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
+              Context window
+            </span>
+            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)" }}>
+              ~{contextUsage.percentage}%
+            </span>
+          </div>
+          <div style={{ height: 4, background: "var(--line)", borderRadius: 2 }}>
+            <div style={{
+              height: "100%", width: `${contextUsage.percentage}%`, borderRadius: 2,
+              background: contextUsage.percentage < 60 ? "#22c55e" : contextUsage.percentage < 85 ? "#ffbf69" : "#f87171",
+              transition: "width 0.3s ease",
+            }} />
+          </div>
+          <div style={{ ...MONO, fontSize: 9, color: "rgba(140,194,255,0.35)", marginTop: 3 }}>
+            ~{(contextUsage.usedTokens / 1000).toFixed(1)}k / {(contextUsage.totalTokens / 1000).toFixed(0)}k tokens
+          </div>
+        </div>
+      </RailPanel>
+
       {/* Inspector */}
-      <RailPanel eyebrow="Inspector" flex={node ? 2 : undefined}>
+      <RailPanel eyebrow="Inspector">
         {compareNode && node ? (
-          <div style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
+          <div style={{ overflowY: "auto", maxHeight: 420 }}>
             <DiffPanel nodeA={node} nodeB={compareNode} onClear={onClearCompare ?? (() => {})} />
           </div>
         ) : node ? (
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexShrink: 0 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <button
                 onClick={toggleBookmark}
                 title={bookmarked ? "Remove bookmark" : "Bookmark this node"}
@@ -103,7 +180,7 @@ export default function RightRail({
                 aria-label="Close inspector"
               >×</button>
             </div>
-            <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
+            <div style={{ overflowY: "auto", maxHeight: 420 }}>
               <InspectorPanel node={node} events={events} />
             </div>
           </div>
@@ -131,7 +208,9 @@ export default function RightRail({
 
       {/* Files */}
       <RailPanel eyebrow="Files" collapsible>
-        <HeatmapPanel events={events} />
+        <div style={{ maxHeight: 130, overflowY: "auto" }}>
+          <HeatmapPanel events={events} />
+        </div>
       </RailPanel>
 
       {/* Bookmarks */}
