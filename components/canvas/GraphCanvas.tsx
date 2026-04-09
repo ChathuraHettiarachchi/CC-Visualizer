@@ -66,9 +66,10 @@ function toolColor(name: string): string {
 }
 
 function toolNodeSize(duration: number | null, minMs: number, maxMs: number): number {
-  if (duration === null || maxMs === minMs) return 5;
+  if (duration === null || !isFinite(duration) || !isFinite(minMs) || !isFinite(maxMs) || maxMs === minMs) return 5;
   const t = (duration - minMs) / (maxMs - minMs);
-  return Math.round(4 + t * 10); // range: 4–14
+  const size = Math.round(4 + t * 10);
+  return isFinite(size) ? size : 5; // range: 4–14
 }
 
 function formatNodeLabel(node: Record<string, unknown>): string {
@@ -238,7 +239,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   const durationRange = useMemo(() => {
     const durations = graphData.nodes
       .map(n => ((n as Record<string, unknown>).data as Record<string, unknown>)?.duration as number | null)
-      .filter((d): d is number => d !== null);
+      .filter((d): d is number => d !== null && isFinite(d));
     if (durations.length === 0) return { min: 0, max: 0 };
     return { min: Math.min(...durations), max: Math.max(...durations) };
   }, [graphData.nodes]);
@@ -399,9 +400,10 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     const data = (node.data as Record<string, unknown>) ?? {};
     const status = data.status as string | undefined;
     const duration = data.duration as number | null;
-    const size = node.type === "toolcall"
+    const rawSize = node.type === "toolcall"
       ? toolNodeSize(duration, durationRange.min, durationRange.max)
       : (TYPE_VAL[node.type as string] ?? 5);
+    const size = isFinite(rawSize) && rawSize > 0 ? rawSize : 5;
 
     const group = new THREE.Group();
 
