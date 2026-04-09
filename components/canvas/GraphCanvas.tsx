@@ -27,8 +27,10 @@ interface GraphCanvasProps {
   events: ClaudeEvent[];
   sessionId: string;
   onNodeSelect?: (node: SelectedNode | null) => void;
-  sessionGroups?: Map<string, ClaudeEvent[]>;
+  onSecondNodeSelect?: (node: SelectedNode | null) => void;
 }
+
+const START_COLOR = "#22c55e";
 
 const TYPE_COLOR: Record<string, string> = {
   toolcall:     "#61d0ff",
@@ -43,6 +45,31 @@ const TYPE_VAL: Record<string, number> = {
 };
 
 const SESSION_COLORS = ["#61d0ff","#7cf3c8","#ffbf69","#a78bfa","#f87171","#4ade80"];
+
+const TOOL_PALETTE = [
+  "#61d0ff", // blue
+  "#7cf3c8", // teal
+  "#ffbf69", // amber
+  "#a78bfa", // purple
+  "#f87171", // red
+  "#4ade80", // green
+  "#fb923c", // orange
+  "#e879f9", // pink
+  "#38bdf8", // sky
+  "#facc15", // yellow
+];
+
+function toolColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return TOOL_PALETTE[Math.abs(hash) % TOOL_PALETTE.length];
+}
+
+function toolNodeSize(duration: number | null, minMs: number, maxMs: number): number {
+  if (duration === null || maxMs === minMs) return 5;
+  const t = (duration - minMs) / (maxMs - minMs);
+  return Math.round(4 + t * 10); // range: 4–14
+}
 
 function makeNodeLabel(text: string): THREE.Sprite {
   const canvas = document.createElement("canvas");
@@ -80,74 +107,45 @@ function makeSessionLabel(text: string, color: string): THREE.Sprite {
   return sprite;
 }
 
-function buildClusteredGraph(sessionGroups: Map<string, ClaudeEvent[]>) {
-  const allNodes: Record<string, unknown>[] = [];
-  const allLinks: Record<string, unknown>[] = [];
+// Animated pulsing ring around the start node
+let startPulseFrame = 0;
+const startPulseMeshes: THREE.Mesh[] = [];
 
-  const entries = Array.from(sessionGroups.entries());
-  const count = entries.length;
-  const CLUSTER_RADIUS = count <= 1 ? 0 : Math.max(450, count * 160);
-
-  entries.forEach(([sessionId, events], sessionIndex) => {
-    const angle = (sessionIndex / count) * 2 * Math.PI;
-    const cx = count > 1 ? CLUSTER_RADIUS * Math.cos(angle) : 0;
-    const cz = count > 1 ? CLUSTER_RADIUS * Math.sin(angle) : 0;
-    const color = SESSION_COLORS[sessionIndex % SESSION_COLORS.length];
-    const sessionLabel = `Session ${sessionIndex + 1}`;
-
-    const { nodes, edges } = eventsToGraph(events);
-
-    // Pin each node to a spiral layout within the cluster
-    nodes.forEach((node, i) => {
-      const spiralAngle = (i / Math.max(nodes.length, 1)) * 4 * Math.PI;
-      const r = Math.min(30 + i * 14, 130);
-      allNodes.push({
-        id:           node.id,
-        type:         node.type,
-        data:         node.data,
-        sessionId,
-        sessionColor: color,
-        sessionLabel,
-        fx: cx + r * Math.cos(spiralAngle),
-        fy: (i % 5 - 2) * 28,
-        fz: cz + r * Math.sin(spiralAngle),
-      });
-    });
-
-    // Floating session label node at cluster top
-    allNodes.push({
-      id:           `__label_${sessionId}`,
-      type:         "__session_label",
-      data:         { label: sessionLabel },
-      sessionId,
-      sessionColor: color,
-      sessionLabel,
-      isLabel:      true,
-      fx: cx,
-      fy: 160,
-      fz: cz,
-    });
-
-    edges.forEach(e => {
-      allLinks.push({
-        source:       e.source,
-        target:       e.target,
-        isActive:     ((e.data as Record<string, unknown>)?.isActive ?? false) as boolean,
-        sessionColor: color,
-      });
-    });
+function makeStartRing(size: number): THREE.Mesh {
+  const geo = new THREE.SphereGeometry(size + 3, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({
+    color: START_COLOR,
+    transparent: true,
+    opacity: 0.35,
+    wireframe: true,
   });
-
-  return { nodes: allNodes, links: allLinks };
+  const mesh = new THREE.Mesh(geo, mat);
+  startPulseMeshes.push(mesh);
+  return mesh;
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGroups }: GraphCanvasProps) {
+function durationColor(duration: number | null, minMs: number, maxMs: number): string {
+  if (duration === null) return TYPE_COLOR.toolcall;
+  if (maxMs === minMs) return "#22c55e";
+  const t = (duration - minMs) / (maxMs - minMs); // 0=fast, 1=slow
+  if (t < 0.5) {
+    const u = t * 2;
+    return `rgb(${Math.round(34 + u * (255 - 34))}, ${Math.round(197 + u * (191 - 197))}, ${Math.round(94 + u * (105 - 94))})`;
+  } else {
+    const u = (t - 0.5) * 2;
+    return `rgb(${Math.round(255 + u * (248 - 255))}, ${Math.round(191 + u * (113 - 191))}, ${Math.round(105 + u * (113 - 105))})`;
+  }
+}
+
+export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondNodeSelect }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 800, height: 600 });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Track container size so the 3D canvas fills its parent
   useEffect(() => {
@@ -161,17 +159,20 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGr
     return () => ro.disconnect();
   }, []);
 
-  // Convert events → 3D graph data (reuse existing eventsToGraph, strip position)
+  // Clear accumulated start-node pulse meshes when graph rebuilds
+  useEffect(() => {
+    startPulseMeshes.length = 0;
+  }, [events]);
+
+  // Convert events → 3D graph data
   const graphData = useMemo(() => {
-    if (sessionGroups && sessionGroups.size > 0) {
-      return buildClusteredGraph(sessionGroups);
-    }
     const { nodes, edges } = eventsToGraph(events);
     return {
       nodes: nodes.map((n) => ({
-        id:   n.id,
-        type: n.type,
-        data: n.data,
+        id:      n.id,
+        type:    n.type,
+        data:    n.data,
+        isStart: (n.data as Record<string, unknown>)?.isStart ?? false,
       })),
       links: edges.map((e) => ({
         source:   e.source,
@@ -179,33 +180,179 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGr
         isActive: ((e.data as Record<string, unknown>)?.isActive ?? false) as boolean,
       })),
     };
-  }, [events, sessionGroups]);
+  }, [events]);
 
-  // Reset camera when session changes
+  // After simulation settles, fly camera to the start node (set flag on session change)
   const fgRef = useRef<ForceGraphMethods>(undefined);
+  const flyToStart = useRef(false);
+
   useEffect(() => {
-    if (fgRef.current) {
-      fgRef.current.cameraPosition({ x: 0, y: 0, z: 300 }, { x: 0, y: 0, z: 0 }, 800);
-    }
+    flyToStart.current = true;
+    setFollowMode(false);
+    prevNodeCountRef.current = 0;
   }, [sessionId]);
 
-  const handleNodeClick = useCallback(
-    (node: Record<string, unknown>) => {
-      if ((node as Record<string, unknown>).type === "__session_label") return;
+  // ── Search ────────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // ── Heatmap ───────────────────────────────────────────────────────────────
+  const [heatmapMode, setHeatmapMode] = useState(false);
+
+  const durationRange = useMemo(() => {
+    const durations = graphData.nodes
+      .map(n => ((n as Record<string, unknown>).data as Record<string, unknown>)?.duration as number | null)
+      .filter((d): d is number => d !== null);
+    if (durations.length === 0) return { min: 0, max: 0 };
+    return { min: Math.min(...durations), max: Math.max(...durations) };
+  }, [graphData.nodes]);
+
+  // ── Follow mode ───────────────────────────────────────────────────────────
+  // When active, every new node added to the end auto-selects and the camera follows it.
+  const [followMode, setFollowMode] = useState(false);
+
+  // ── Playback ──────────────────────────────────────────────────────────────
+  const [playbackIdx, setPlaybackIdx] = useState<number | null>(null);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+  const isPlaying = playbackIdx !== null;
+
+  const orderedPlaybackNodes = useMemo(() =>
+    graphData.nodes
+      .filter(n => (n as Record<string, unknown>).type !== "__session_label")
+      .sort((a, b) => {
+        const aTs = ((a as Record<string, unknown>).data as Record<string, unknown>)?.timestamp as number ?? 0;
+        const bTs = ((b as Record<string, unknown>).data as Record<string, unknown>)?.timestamp as number ?? 0;
+        return aTs - bTs;
+      }),
+    [graphData.nodes]
+  );
+
+  // Follow mode: when new nodes arrive, fly to and select the latest one
+  const prevNodeCountRef = useRef(0);
+  useEffect(() => {
+    const count = orderedPlaybackNodes.length;
+    if (followMode && count > prevNodeCountRef.current && count > 0) {
+      const node = orderedPlaybackNodes[count - 1] as Record<string, unknown>;
       onNodeSelect?.({
         id:   node.id as string,
         type: node.type as string | undefined,
         data: (node.data as Record<string, unknown>) ?? {},
       });
+      if (fgRef.current && node.x !== undefined) {
+        fgRef.current.cameraPosition(
+          { x: (node.x as number) + 20, y: (node.y as number) + 20, z: (node.z as number) + 120 },
+          { x: node.x as number, y: node.y as number, z: node.z as number },
+          600
+        );
+      }
+    }
+    prevNodeCountRef.current = count;
+  }, [orderedPlaybackNodes, followMode, onNodeSelect]);
+
+  // Advance playback: fly to node, select it, then advance after delay
+  useEffect(() => {
+    if (playbackIdx === null) return;
+    if (playbackIdx >= orderedPlaybackNodes.length) {
+      setPlaybackIdx(null);
+      return;
+    }
+    const node = orderedPlaybackNodes[playbackIdx] as Record<string, unknown>;
+    onNodeSelect?.({
+      id:   node.id as string,
+      type: node.type as string | undefined,
+      data: (node.data as Record<string, unknown>) ?? {},
+    });
+    if (fgRef.current && node.x !== undefined) {
+      const x = node.x as number;
+      const y = node.y as number;
+      const z = node.z as number;
+      fgRef.current.cameraPosition(
+        { x: x + 20, y: y + 20, z: z + 120 },
+        { x, y, z },
+        700
+      );
+    }
+    const timer = setTimeout(
+      () => setPlaybackIdx(idx => idx !== null ? idx + 1 : null),
+      Math.round(2200 / replaySpeed)
+    );
+    return () => clearTimeout(timer);
+  }, [playbackIdx, orderedPlaybackNodes, onNodeSelect, replaySpeed]);
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  function exportPNG() {
+    if (!fgRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const renderer = (fgRef.current as any).renderer?.() as THREE.WebGLRenderer | undefined;
+    if (!renderer) return;
+    const url = renderer.domElement.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `session-${sessionId}-${Date.now()}.png`;
+    a.click();
+  }
+
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `session-${sessionId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const handleNodeClick = useCallback(
+    (node: Record<string, unknown>, event: MouseEvent) => {
+      if (node.type === "__session_label") return;
+      setPlaybackIdx(null);
+      setFollowMode(false); // manual click exits follow mode
+      const selected: SelectedNode = {
+        id:   node.id as string,
+        type: node.type as string | undefined,
+        data: (node.data as Record<string, unknown>) ?? {},
+      };
+      if (event?.shiftKey && onSecondNodeSelect) {
+        onSecondNodeSelect(selected);
+      } else {
+        onNodeSelect?.(selected);
+        onSecondNodeSelect?.(null);
+      }
     },
-    [onNodeSelect]
+    [onNodeSelect, onSecondNodeSelect]
   );
 
   const handleBackgroundClick = useCallback(() => {
     onNodeSelect?.(null);
   }, [onNodeSelect]);
 
-  const isClusterMode = !!(sessionGroups && sessionGroups.size > 0);
+  const handleLinkClick = useCallback(
+    (link: Record<string, unknown>) => {
+      const targetId = typeof link.target === "object" && link.target !== null
+        ? (link.target as Record<string, unknown>).id as string
+        : link.target as string;
+      const targetNode = graphData.nodes.find((n) => (n as Record<string, unknown>).id === targetId);
+      if (!targetNode) return;
+      const n = targetNode as Record<string, unknown>;
+      if (n.type === "__session_label") return;
+      onNodeSelect?.({
+        id:   n.id as string,
+        type: n.type as string | undefined,
+        data: (n.data as Record<string, unknown>) ?? {},
+      });
+      // Fly camera to target node
+      if (fgRef.current && n.x !== undefined) {
+        const x = n.x as number;
+        const y = n.y as number;
+        const z = n.z as number;
+        fgRef.current.cameraPosition(
+          { x: x + 60, y: y + 40, z: z + 100 },
+          { x, y, z },
+          600
+        );
+      }
+    },
+    [graphData.nodes, onNodeSelect]
+  );
 
   return (
     <div
@@ -218,11 +365,31 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGr
         width={dims.width}
         height={dims.height}
         backgroundColor="#07111f"
-        nodeColor={(node: Record<string, unknown>) =>
-          (node.sessionColor as string) ?? TYPE_COLOR[node.type as string] ?? "#61d0ff"
-        }
+        nodeColor={(node: Record<string, unknown>) => {
+          if (node.isStart) return START_COLOR;
+          let base: string;
+          if (heatmapMode && node.type === "toolcall") {
+            const dur = ((node.data as Record<string, unknown>)?.duration as number | null) ?? null;
+            base = durationColor(dur, durationRange.min, durationRange.max);
+          } else if (node.type === "toolcall") {
+            const toolName = ((node.data as Record<string, unknown>)?.toolName as string) ?? "";
+            base = toolColor(toolName);
+          } else {
+            base = (node.sessionColor as string) ?? TYPE_COLOR[node.type as string] ?? "#61d0ff";
+          }
+          if (!searchQuery || node.type === "__session_label") return base;
+          const label = node.type === "toolcall"
+            ? (((node.data as Record<string, unknown>)?.toolName as string) ?? "tool")
+            : (node.type as string);
+          const matches = label.toLowerCase().includes(searchQuery.toLowerCase());
+          return matches ? base : `${base}15`;
+        }}
         nodeVal={(node: Record<string, unknown>) => {
           if (node.type === "__session_label") return 0;
+          if (node.type === "toolcall") {
+            const dur = ((node.data as Record<string, unknown>)?.duration as number | null) ?? null;
+            return toolNodeSize(dur, durationRange.min, durationRange.max);
+          }
           return TYPE_VAL[node.type as string] ?? 4;
         }}
         nodeResolution={16}
@@ -249,8 +416,20 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGr
           const label = node.type === "toolcall"
             ? ((node.data as Record<string, unknown>)?.toolName as string || "tool")
             : (node.type as string);
-          const sprite = makeNodeLabel(label);
           const size = TYPE_VAL[node.type as string] ?? 5;
+
+          if (node.isStart) {
+            // Group: label sprite + pulsing ring
+            const group = new THREE.Group();
+            const sprite = makeNodeLabel(label);
+            sprite.position.y = size + 7;
+            group.add(sprite);
+            const ring = makeStartRing(size);
+            group.add(ring);
+            return group;
+          }
+
+          const sprite = makeNodeLabel(label);
           sprite.position.y = size + 7;
           return sprite;
         }}
@@ -279,14 +458,204 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGr
             `</div>`,
           ].join("");
         }}
-        warmupTicks={isClusterMode ? 0 : 120}
-        cooldownTicks={isClusterMode ? 0 : 200}
+        rendererConfig={{ preserveDrawingBuffer: true }}
+        warmupTicks={120}
+        cooldownTicks={200}
         d3AlphaDecay={0.04}
         d3VelocityDecay={0.5}
         showNavInfo={false}
         onNodeClick={handleNodeClick}
         onBackgroundClick={handleBackgroundClick}
+        onLinkClick={handleLinkClick}
+        onEngineStop={() => {
+          if (flyToStart.current && fgRef.current) {
+            flyToStart.current = false;
+            const startNode = graphData.nodes.find(
+              (n) => (n as Record<string, unknown>).isStart
+            ) as Record<string, unknown> | undefined;
+            if (startNode && startNode.x !== undefined) {
+              const x = startNode.x as number;
+              const y = startNode.y as number;
+              const z = startNode.z as number;
+              fgRef.current.cameraPosition(
+                { x: x + 20, y: y + 20, z: z + 120 },
+                { x, y, z },
+                600
+              );
+            } else if (fgRef.current) {
+              fgRef.current.zoomToFit(600, 40);
+            }
+          }
+        }}
+        onRenderFramePre={() => {
+          // Pulse the start node rings every frame regardless of simulation state
+          startPulseFrame += 0.04;
+          const scale = 1 + 0.28 * Math.sin(startPulseFrame);
+          const opacity = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(startPulseFrame));
+          startPulseMeshes.forEach((m) => {
+            m.scale.setScalar(scale);
+            (m.material as THREE.MeshBasicMaterial).opacity = opacity;
+          });
+        }}
       />
+
+      {/* Search overlay — client-only */}
+      {mounted && (
+        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search nodes…"
+            style={{
+              background: "rgba(7,17,31,0.82)", backdropFilter: "blur(12px)",
+              border: "1px solid rgba(140,194,255,0.18)", borderRadius: 20,
+              color: "#edf5ff", fontSize: 12, padding: "6px 14px",
+              fontFamily: "'IBM Plex Mono', monospace", outline: "none", width: 180,
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              style={{
+                background: "none", border: "none",
+                color: "#91a8c7", cursor: "pointer", fontSize: 14,
+              }}
+            >✕</button>
+          )}
+          <button
+            onClick={() => setHeatmapMode(m => !m)}
+            style={{
+              background: heatmapMode ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${heatmapMode ? "rgba(248,113,113,0.4)" : "rgba(140,194,255,0.2)"}`,
+              borderRadius: 14, color: heatmapMode ? "#f87171" : "#91a8c7",
+              cursor: "pointer", fontSize: 11, padding: "4px 12px",
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {heatmapMode ? "● Heatmap" : "○ Heatmap"}
+          </button>
+          <button
+            onClick={() => {
+              const node = orderedPlaybackNodes[0];
+              if (!node || !fgRef.current) return;
+              setFollowMode(false);
+              const n = node as Record<string, unknown>;
+              onNodeSelect?.({ id: n.id as string, type: n.type as string | undefined, data: (n.data as Record<string, unknown>) ?? {} });
+              if (n.x !== undefined) {
+                fgRef.current.cameraPosition(
+                  { x: (n.x as number) + 20, y: (n.y as number) + 20, z: (n.z as number) + 120 },
+                  { x: n.x as number, y: n.y as number, z: n.z as number },
+                  600
+                );
+              }
+            }}
+            style={{
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(140,194,255,0.2)",
+              borderRadius: 14, color: "#91a8c7", cursor: "pointer",
+              fontSize: 11, padding: "4px 12px", fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            ⇤ First
+          </button>
+          <button
+            onClick={() => {
+              const node = orderedPlaybackNodes[orderedPlaybackNodes.length - 1];
+              if (!node || !fgRef.current) return;
+              const isNowFollow = !followMode;
+              setFollowMode(isNowFollow);
+              const n = node as Record<string, unknown>;
+              onNodeSelect?.({ id: n.id as string, type: n.type as string | undefined, data: (n.data as Record<string, unknown>) ?? {} });
+              if (n.x !== undefined) {
+                fgRef.current.cameraPosition(
+                  { x: (n.x as number) + 20, y: (n.y as number) + 20, z: (n.z as number) + 120 },
+                  { x: n.x as number, y: n.y as number, z: n.z as number },
+                  600
+                );
+              }
+            }}
+            style={{
+              background: followMode ? "rgba(124,243,200,0.15)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${followMode ? "rgba(124,243,200,0.45)" : "rgba(140,194,255,0.2)"}`,
+              borderRadius: 14, color: followMode ? "#7cf3c8" : "#91a8c7", cursor: "pointer",
+              fontSize: 11, padding: "4px 12px", fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {followMode ? "● Last" : "Last ⇥"}
+          </button>
+        </div>
+      )}
+
+      {/* Export buttons — top-right */}
+      {mounted && (
+        <div style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 6 }}>
+          {(["PNG", "JSON"] as const).map(fmt => (
+            <button
+              key={fmt}
+              onClick={fmt === "PNG" ? exportPNG : exportJSON}
+              style={{
+                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(140,194,255,0.2)",
+                borderRadius: 14, color: "#91a8c7", cursor: "pointer",
+                fontSize: 11, padding: "4px 12px",
+                fontFamily: "'IBM Plex Mono', monospace",
+              }}
+            >
+              ↓ {fmt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Playback controls — client-only to avoid SSR/hydration mismatch */}
+      {mounted && <div style={{
+        position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+        display: "flex", alignItems: "center", gap: 10,
+        background: "rgba(7,17,31,0.82)", backdropFilter: "blur(12px)",
+        border: "1px solid rgba(140,194,255,0.18)", borderRadius: 40,
+        padding: "8px 18px", fontFamily: "'IBM Plex Mono', monospace",
+      }}>
+        {isPlaying ? (
+          <>
+            {[0.5, 1, 2, 4].map(speed => (
+              <button
+                key={speed}
+                onClick={() => setReplaySpeed(speed)}
+                style={{
+                  background: replaySpeed === speed ? "rgba(97,208,255,0.2)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${replaySpeed === speed ? "rgba(97,208,255,0.5)" : "rgba(140,194,255,0.15)"}`,
+                  borderRadius: 14, color: replaySpeed === speed ? "#61d0ff" : "#91a8c7",
+                  cursor: "pointer", fontSize: 11, padding: "3px 9px", fontFamily: "inherit",
+                }}
+              >
+                {speed}×
+              </button>
+            ))}
+            <span style={{ color: "#91a8c7", fontSize: 12 }}>
+              {playbackIdx! + 1} / {orderedPlaybackNodes.length}
+            </span>
+            <button
+              onClick={() => setPlaybackIdx(null)}
+              style={{
+                background: "rgba(140,194,255,0.12)", border: "1px solid rgba(140,194,255,0.25)",
+                borderRadius: 20, color: "#edf5ff", cursor: "pointer",
+                fontSize: 13, padding: "4px 14px", fontFamily: "inherit",
+              }}
+            >
+              ■ Stop
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => orderedPlaybackNodes.length > 0 && setPlaybackIdx(0)}
+            style={{
+              background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)",
+              borderRadius: 20, color: "#22c55e", cursor: "pointer",
+              fontSize: 13, padding: "4px 18px", fontFamily: "inherit",
+            }}
+          >
+            ▶ Replay Session
+          </button>
+        )}
+      </div>}
     </div>
   );
 }
