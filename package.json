@@ -1,12 +1,28 @@
 {
   "name": "cc-visualizer",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "description": "Real-time Claude Code session visualizer — 3D graph of tool calls, subagents, and events",
+  "keywords": ["claude", "claude-code", "ai", "visualizer", "developer-tools"],
+  "repository": "github:chettiarachchi/cc-visualizer",
+  "license": "MIT",
+  "bin": {
+    "cc-visualizer": "./bin/cc-visualizer.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    ".next/standalone",
+    "public"
+  ],
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/postbuild.js",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.2",
