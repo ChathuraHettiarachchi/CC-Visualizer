@@ -31,6 +31,28 @@ function sessionStats(evts: ClaudeEvent[]) {
 export default function LeftRail({
   sessions, activeId, onSelect, events, sessionEvents, childSessions,
 }: LeftRailProps) {
+  // Estimate token usage from raw event payload sizes (4 chars ≈ 1 token)
+  const { estInputTokens, estOutputTokens, estCostUsd } = (() => {
+    let inputChars = 0, outputChars = 0;
+    for (const e of events) {
+      if (e.hook_event_name === "PreToolUse") {
+        inputChars += JSON.stringify((e as { tool_input: unknown }).tool_input ?? {}).length;
+      } else if (e.hook_event_name === "PostToolUse") {
+        outputChars += String((e as { tool_response: unknown }).tool_response ?? "").length;
+      }
+    }
+    const inTok  = Math.round(inputChars  / 4);
+    const outTok = Math.round(outputChars / 4);
+    // Sonnet 4.x pricing: $3/M input, $15/M output
+    const cost   = (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+    return { estInputTokens: inTok, estOutputTokens: outTok, estCostUsd: cost };
+  })();
+
+  function fmtTok(n: number) {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+    return String(n);
+  }
+
   const globalStats = [
     { label: "Events",   value: events.length },
     { label: "Tools",    value: events.filter(e => e.hook_event_name === "PreToolUse").length },
@@ -47,6 +69,9 @@ export default function LeftRail({
         return active ? (active as { tool_name: string }).tool_name : "—";
       })(),
     },
+    { label: "~In tok",  value: fmtTok(estInputTokens) },
+    { label: "~Out tok", value: fmtTok(estOutputTokens) },
+    { label: "~Cost",    value: estCostUsd < 0.01 ? "<$0.01" : `$${estCostUsd.toFixed(2)}` },
   ];
 
   return (

@@ -33,7 +33,7 @@ export default function Timeline({ events, selectedNode }: TimelineProps) {
   const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", fontFamily: "var(--font-ibm-plex-mono), monospace" }}>
+    <div style={{ fontFamily: "var(--font-ibm-plex-mono), monospace" }}>
       {sorted.map((event) => {
         const selected = isSelected(event, selectedNode);
         return (

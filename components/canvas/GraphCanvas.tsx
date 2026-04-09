@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { ForceGraphMethods } from "react-force-graph-3d";
 import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
+import FlowView2D, { type FlowView2DHandle } from "@/components/canvas/FlowView2D";
 import * as THREE from "three";
 
 // Dynamic import — Three.js/WebGL requires the browser.
@@ -235,6 +236,8 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
   // ── Heatmap ───────────────────────────────────────────────────────────────
   const [heatmapMode, setHeatmapMode] = useState(false);
+  const [view2D, setView2D] = useState(false);
+  const flow2DRef = useRef<FlowView2DHandle>(null);
 
   const durationRange = useMemo(() => {
     const durations = graphData.nodes
@@ -439,6 +442,22 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       ref={containerRef}
       style={{ width: "100%", height: "100%", position: "relative", borderRadius: 16, overflow: "hidden" }}
     >
+      {/* 2D flow view overlay */}
+      {view2D && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 2, background: "#07111f", borderRadius: 16 }}>
+          <FlowView2D
+            ref={flow2DRef}
+            events={events}
+            heatmapMode={heatmapMode}
+            onNodeClick={(id) => {
+              const node = graphData.nodes.find(n => (n as Record<string, unknown>).id === id) as Record<string, unknown> | undefined;
+              if (!node || node.type === "__session_label") return;
+              onNodeSelect?.({ id: id, type: node.type as string | undefined, data: (node.data as Record<string, unknown>) ?? {} });
+            }}
+          />
+        </div>
+      )}
+
       <ForceGraph3D
         ref={fgRef}
         graphData={graphData}
@@ -565,7 +584,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
       {/* Search overlay — client-only */}
       {mounted && (
-        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 8, zIndex: 10 }}>
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -587,6 +606,18 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
             >✕</button>
           )}
           <button
+            onClick={() => setView2D(v => !v)}
+            style={{
+              background: view2D ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${view2D ? "rgba(167,139,250,0.4)" : "rgba(140,194,255,0.2)"}`,
+              borderRadius: 14, color: view2D ? "#a78bfa" : "#91a8c7",
+              cursor: "pointer", fontSize: 11, padding: "4px 12px",
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {view2D ? "⬡ 3D" : "⊞ 2D"}
+          </button>
+          <button
             onClick={() => setHeatmapMode(m => !m)}
             style={{
               background: heatmapMode ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.06)",
@@ -600,6 +631,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           </button>
           <button
             onClick={() => {
+              if (view2D) { flow2DRef.current?.scrollToFirst(); return; }
               const node = orderedPlaybackNodes[0];
               if (!node || !fgRef.current) return;
               setFollowMode(false);
@@ -623,6 +655,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           </button>
           <button
             onClick={() => {
+              if (view2D) { flow2DRef.current?.scrollToLast(); return; }
               const node = orderedPlaybackNodes[orderedPlaybackNodes.length - 1];
               if (!node || !fgRef.current) return;
               const isNowFollow = !followMode;
@@ -651,7 +684,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
       {/* Export buttons — top-right */}
       {mounted && (
-        <div style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 6 }}>
+        <div style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 6, zIndex: 10 }}>
           {(["PNG", "JSON"] as const).map(fmt => (
             <button
               key={fmt}
@@ -671,7 +704,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
       {/* Playback controls — client-only to avoid SSR/hydration mismatch */}
       {mounted && <div style={{
-        position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+        position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", zIndex: 10,
         display: "flex", alignItems: "center", gap: 10,
         background: "rgba(7,17,31,0.82)", backdropFilter: "blur(12px)",
         border: "1px solid rgba(140,194,255,0.18)", borderRadius: 40,
@@ -720,6 +753,78 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           </button>
         )}
       </div>}
+      {/* Color legend — bottom-right */}
+      {mounted && <Legend />}
+    </div>
+  );
+}
+
+function Legend() {
+  const [open, setOpen] = useState(false);
+  const MONO = "'IBM Plex Mono', monospace";
+
+  return (
+    <div style={{ position: "absolute", bottom: 20, right: 12, zIndex: 10 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: "rgba(7,17,31,0.82)", backdropFilter: "blur(12px)",
+          border: "1px solid rgba(140,194,255,0.18)", borderRadius: 20,
+          color: "#91a8c7", cursor: "pointer", fontSize: 11, padding: "4px 14px",
+          fontFamily: MONO,
+        }}
+      >
+        {open ? "▾ Legend" : "▸ Legend"}
+      </button>
+
+      {open && (
+        <div style={{
+          marginTop: 6, padding: "12px 14px",
+          background: "rgba(7,17,31,0.92)", backdropFilter: "blur(16px)",
+          border: "1px solid rgba(140,194,255,0.18)", borderRadius: 16,
+          fontFamily: MONO, fontSize: 10, color: "#91a8c7",
+          minWidth: 200,
+        }}>
+          <div style={{ fontWeight: 700, color: "#edf5ff", marginBottom: 10, fontSize: 11 }}>
+            Color &amp; Size Guide
+          </div>
+
+          {/* Node types */}
+          <div style={{ color: "rgba(140,194,255,0.5)", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Nodes</div>
+          {[
+            { color: "#61d0ff", label: "Tool call (color = tool name)" },
+            { color: "#ffbf69", label: "Notification" },
+            { color: "#7cf3c8", label: "Stop / session end" },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+              <span>{label}</span>
+            </div>
+          ))}
+
+          {/* Rings */}
+          <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Status rings</div>
+          {[
+            { color: "#22c55e", label: "First node (session start)" },
+            { color: "#ffbf69", label: "Pending (in-progress)" },
+            { color: "#f87171", label: "Error" },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${color}`, flexShrink: 0 }} />
+              <span>{label}</span>
+            </div>
+          ))}
+
+          {/* Size */}
+          <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Size</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#61d0ff" }} />
+            <span>→</span>
+            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#61d0ff" }} />
+            <span style={{ marginLeft: 4 }}>Faster → Slower duration</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
