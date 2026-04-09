@@ -7,6 +7,8 @@ import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
 import FlowView2D, { type FlowView2DHandle } from "@/components/canvas/FlowView2D";
 import * as THREE from "three";
+import CommandPalette from "@/components/panels/CommandPalette";
+import { generateSummary } from "@/lib/generate-summary";
 
 // Dynamic import — Three.js/WebGL requires the browser.
 // Cast to `any` for JSX usage to work around next/dynamic stripping the ref prop
@@ -29,6 +31,7 @@ interface GraphCanvasProps {
   sessionId: string;
   onNodeSelect?: (node: SelectedNode | null) => void;
   onSecondNodeSelect?: (node: SelectedNode | null) => void;
+  selectedNodeId?: string;
 }
 
 const START_COLOR = "#22c55e";
@@ -168,7 +171,7 @@ function durationColor(duration: number | null, minMs: number, maxMs: number): s
   }
 }
 
-export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondNodeSelect }: GraphCanvasProps) {
+export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondNodeSelect, selectedNodeId }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 800, height: 600 });
   const [mounted, setMounted] = useState(false);
@@ -231,6 +234,8 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     prevNodeCountRef.current = 0;
   }, [sessionId]);
 
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+
   // ── Search ────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -265,6 +270,18 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
         return aTs - bTs;
       }),
     [graphData.nodes]
+  );
+
+  const paletteNodes = useMemo(() =>
+    orderedPlaybackNodes.map((n) => {
+      const nd = n as Record<string, unknown>;
+      const data = (nd.data as Record<string, unknown>) ?? {};
+      const label = nd.type === "toolcall"
+        ? (data.toolName as string ?? "tool")
+        : (nd.type as string ?? "node");
+      return { id: nd.id as string, label, type: nd.type as string };
+    }),
+    [orderedPlaybackNodes]
   );
 
   // Follow mode: when new nodes arrive, fly to and select the latest one
@@ -440,7 +457,37 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", position: "relative", borderRadius: 16, overflow: "hidden" }}
+      tabIndex={0}
+      style={{ width: "100%", height: "100%", position: "relative", borderRadius: 16, overflow: "hidden", outline: "none" }}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+          e.preventDefault();
+          setCmdPaletteOpen(true);
+          return;
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          const dir = e.key === "ArrowRight" ? 1 : -1;
+          const currentIdx = orderedPlaybackNodes.findIndex(
+            (n) => (n as Record<string, unknown>).id === selectedNodeId
+          );
+          const nextIdx = Math.max(0, Math.min(orderedPlaybackNodes.length - 1,
+            currentIdx === -1 ? (dir === 1 ? 0 : orderedPlaybackNodes.length - 1) : currentIdx + dir
+          ));
+          const nextNode = orderedPlaybackNodes[nextIdx] as Record<string, unknown>;
+          if (nextNode) {
+            onNodeSelect?.({
+              id: nextNode.id as string,
+              type: nextNode.type as string | undefined,
+              data: (nextNode.data as Record<string, unknown>) ?? {},
+            });
+          }
+          return;
+        }
+        if (e.key === "Escape") {
+          onNodeSelect?.(null);
+        }
+      }}
     >
       {/* 2D flow view overlay */}
       {view2D && (
@@ -699,6 +746,26 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
               ↓ {fmt}
             </button>
           ))}
+          <button
+            onClick={() => {
+              const md = generateSummary(sessionId, events);
+              const blob = new Blob([md], { type: "text/markdown" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `session-${sessionId}-summary.md`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(140,194,255,0.2)",
+              borderRadius: 14, color: "#91a8c7", cursor: "pointer",
+              fontSize: 11, padding: "4px 12px",
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            ↓ Summary
+          </button>
         </div>
       )}
 
@@ -755,12 +822,22 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
       </div>}
       {/* Color legend — bottom-right */}
       {mounted && <Legend />}
+      <CommandPalette
+        open={cmdPaletteOpen}
+        onClose={() => setCmdPaletteOpen(false)}
+        nodes={paletteNodes}
+        onSelect={(id) => {
+          const node = graphData.nodes.find((n) => (n as Record<string, unknown>).id === id) as Record<string, unknown> | undefined;
+          if (!node) return;
+          onNodeSelect?.({ id, type: node.type as string | undefined, data: (node.data as Record<string, unknown>) ?? {} });
+        }}
+      />
     </div>
   );
 }
 
 function Legend() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const MONO = "'IBM Plex Mono', monospace";
 
   return (
@@ -783,31 +860,45 @@ function Legend() {
           background: "rgba(7,17,31,0.92)", backdropFilter: "blur(16px)",
           border: "1px solid rgba(140,194,255,0.18)", borderRadius: 16,
           fontFamily: MONO, fontSize: 10, color: "#91a8c7",
-          minWidth: 200,
+          minWidth: 210,
         }}>
           <div style={{ fontWeight: 700, color: "#edf5ff", marginBottom: 10, fontSize: 11 }}>
             Color &amp; Size Guide
           </div>
 
           {/* Node types */}
-          <div style={{ color: "rgba(140,194,255,0.5)", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Nodes</div>
+          <div style={{ color: "rgba(140,194,255,0.5)", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Node types</div>
           {[
-            { color: "#61d0ff", label: "Tool call (color = tool name)" },
             { color: "#ffbf69", label: "Notification" },
             { color: "#7cf3c8", label: "Stop / session end" },
           ].map(({ color, label }) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+              <div style={{
+                width: 10, height: 10, borderRadius: "50%",
+                background: color + "22", border: `1.5px solid ${color}`, flexShrink: 0,
+              }} />
               <span>{label}</span>
             </div>
           ))}
 
-          {/* Rings */}
+          {/* Tool palette */}
+          <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Tool calls (by name)</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 4 }}>
+            {TOOL_PALETTE.map(c => (
+              <div key={c} style={{
+                width: 12, height: 12, borderRadius: "50%",
+                background: c + "22", border: `1.5px solid ${c}`,
+              }} />
+            ))}
+          </div>
+          <div style={{ fontSize: 9, color: "rgba(140,194,255,0.4)", marginBottom: 4 }}>Each tool gets a unique color</div>
+
+          {/* Status rings */}
           <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Status rings</div>
           {[
-            { color: "#22c55e", label: "First node (session start)" },
-            { color: "#ffbf69", label: "Pending (in-progress)" },
-            { color: "#f87171", label: "Error" },
+            { color: "#22c55e", label: "First node (start)", solid: false },
+            { color: "#ffbf69", label: "Pending (running)", solid: false },
+            { color: "#f87171", label: "Error", solid: false },
           ].map(({ color, label }) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${color}`, flexShrink: 0 }} />
@@ -816,12 +907,12 @@ function Legend() {
           ))}
 
           {/* Size */}
-          <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Size</div>
+          <div style={{ color: "rgba(140,194,255,0.5)", margin: "10px 0 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Node size = duration</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#61d0ff" }} />
-            <span>→</span>
-            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#61d0ff" }} />
-            <span style={{ marginLeft: 4 }}>Faster → Slower duration</span>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e22", border: "1.5px solid #22c55e" }} />
+            <span style={{ color: "rgba(140,194,255,0.5)" }}>→</span>
+            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#f8711122", border: "1.5px solid #f87171" }} />
+            <span style={{ marginLeft: 4 }}>fast → slow</span>
           </div>
         </div>
       )}

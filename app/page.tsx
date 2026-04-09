@@ -120,6 +120,7 @@ export default function Home() {
             sessionId={activeId ?? ""}
             onNodeSelect={(n) => { setSelectedNode(n); setCompareNode(null); }}
             onSecondNodeSelect={setCompareNode}
+            selectedNodeId={selectedNode?.id}
           />
         </div>
         <EventFeed events={activeEvents} />
