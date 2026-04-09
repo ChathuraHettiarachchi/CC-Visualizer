@@ -87,7 +87,7 @@ export default function Home() {
       <LeftRail
         sessions={sessions}
         activeId={activeId}
-        onSelect={setActiveId}
+        onSelect={(id) => { setActiveId(id); setSavedSession(null); }}
         events={activeEvents}
         sessionEvents={sessionEvents}
         childSessions={childSessions}

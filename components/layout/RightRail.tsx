@@ -73,6 +73,7 @@ export default function RightRail({
 
     // Walk turns in order; for each tool call the API input = full context so far
     let cumulativeChars = 0;
+    let inTokTotal = 0;
     let outTokTotal = 0;
     let sessionCost = 0;
     const seen = new Set<string>();
@@ -87,6 +88,7 @@ export default function RightRail({
         const inTok  = cumulativeChars / 4;
         const outTok = responseChars / 4;
         sessionCost  += (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+        inTokTotal   += inTok;
         outTokTotal  += outTok;
         cumulativeChars += responseChars;
       } else if (e.hook_event_name === "Notification") {
@@ -94,7 +96,7 @@ export default function RightRail({
       }
     }
 
-    const totalInTok  = Math.round(cumulativeChars / 4);
+    const totalInTok  = Math.round(inTokTotal);
     const totalOutTok = Math.round(outTokTotal);
     const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
