@@ -42,6 +42,29 @@ export default function LeftRail({ sessions, activeId, onSelect, events }: LeftR
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* All Sessions synthetic tab */}
+            <button
+              onClick={() => onSelect("__all")}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 12px",
+                borderRadius: 14,
+                border: `1px solid ${activeId === "__all" ? "rgba(124,243,200,0.34)" : "rgba(123,178,255,0.14)"}`,
+                background: activeId === "__all" ? "rgba(124,243,200,0.08)" : "rgba(255,255,255,0.025)",
+                boxShadow: activeId === "__all" ? "0 0 0 1px rgba(124,243,200,0.15)" : "none",
+                cursor: "pointer",
+                color: activeId === "__all" ? "var(--accent-2)" : "var(--muted)",
+                fontFamily: "var(--font-ibm-plex-mono), monospace",
+                fontSize: 12,
+                fontWeight: activeId === "__all" ? 700 : 400,
+                transition: "all 0.15s",
+                marginBottom: 4,
+              }}
+            >
+              All Sessions
+            </button>
             {sessions.map((s) => {
               const isActive = s.id === activeId;
               return (

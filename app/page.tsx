@@ -9,19 +9,21 @@ import RightRail from "@/components/layout/RightRail";
 
 export default function Home() {
   const { sessions, sessionEvents, connected } = useSSE();
-  const [activeId, setActiveId] = useState<string>("");
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
 
   useEffect(() => {
-    if (sessions.length > 0 && (!activeId || !sessions.find((s) => s.id === activeId))) {
+    if (sessions.length > 0 && (!activeId || (activeId !== "__all" && !sessions.find((s) => s.id === activeId)))) {
       setActiveId(sessions[0].id);
     }
-    if (sessions.length === 0) setActiveId("__none");
+    if (sessions.length === 0) setActiveId(null);
   }, [sessions, activeId]);
 
   useEffect(() => { setSelectedNode(null); }, [activeId]);
 
-  const activeEvents = sessionEvents.get(activeId) ?? [];
+  const activeEvents = activeId === "__all"
+    ? Array.from(sessionEvents.values()).flat()
+    : (activeId ? sessionEvents.get(activeId) : undefined) ?? [];
 
   return (
     <div style={{
@@ -37,13 +39,13 @@ export default function Home() {
       <LeftRail
         sessions={sessions}
         activeId={activeId}
-        onSelect={(id: string) => { setActiveId(id); }}
+        onSelect={setActiveId}
         events={activeEvents}
       />
       <div style={{ position: "relative", overflow: "hidden", borderRadius: 16 }}>
         <GraphCanvas
           events={activeEvents}
-          sessionId={activeId}
+          sessionId={activeId ?? ""}
           onNodeSelect={setSelectedNode}
         />
       </div>

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { ForceGraphMethods } from "react-force-graph-3d";
 import type { ClaudeEvent } from "@/lib/types";
 import { eventsToGraph } from "@/lib/events-to-graph";
+import * as THREE from "three";
 
 // Dynamic import — Three.js/WebGL requires the browser.
 // Cast to `any` for JSX usage to work around next/dynamic stripping the ref prop
@@ -35,10 +36,32 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 const TYPE_VAL: Record<string, number> = {
-  toolcall:     4,
-  notification: 6,
-  stop:         5,
+  toolcall:     5,
+  notification: 9,
+  stop:         11,
 };
+
+function makeNodeLabel(text: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 56;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, 256, 56);
+  ctx.font = "bold 20px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = "rgba(237,245,255,0.9)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text.slice(0, 18), 128, 28);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(28, 7, 1);
+  return sprite;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,12 +134,49 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
         nodeVal={(node: Record<string, unknown>) => TYPE_VAL[node.type as string] ?? 4}
         nodeResolution={16}
         nodeOpacity={0.92}
-        linkColor={() => "rgba(140,194,255,0.2)"}
-        linkWidth={0.6}
+        linkColor={() => "rgba(140,194,255,0.5)"}
+        linkWidth={1.5}
+        linkDirectionalArrowLength={4}
+        linkDirectionalArrowColor={() => "rgba(140,194,255,0.6)"}
+        linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={(link: Record<string, unknown>) => (link.isActive ? 4 : 0)}
         linkDirectionalParticleColor={() => "#61d0ff"}
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleWidth={2}
+        nodeThreeObjectExtend={true}
+        nodeThreeObject={(node: Record<string, unknown>) => {
+          const label = node.type === "toolcall"
+            ? ((node.data as Record<string, unknown>)?.toolName as string || "tool")
+            : (node.type as string);
+          const sprite = makeNodeLabel(label);
+          const size = TYPE_VAL[node.type as string] ?? 5;
+          sprite.position.y = size + 7;
+          return sprite;
+        }}
+        nodeLabel={(node: Record<string, unknown>) => {
+          const nData = (node.data as Record<string, unknown>) ?? {};
+          const title = node.type === "toolcall"
+            ? (nData.toolName as string || "Tool Call")
+            : (node.type as string);
+          const input = nData.toolInput;
+          let inputStr = "";
+          if (input && typeof input === "object") {
+            inputStr = escapeHtml(JSON.stringify(input, null, 2));
+            if (inputStr.length > 600) inputStr = inputStr.slice(0, 600) + "\n…";
+          }
+          return [
+            `<div style="background:rgba(10,22,40,0.96);border:1px solid rgba(140,194,255,0.28);`,
+            `border-radius:14px;padding:12px 16px;font-family:'IBM Plex Mono',monospace;`,
+            `max-width:320px;box-shadow:0 8px 40px rgba(0,0,0,0.5);pointer-events:none">`,
+            `<div style="color:#edf5ff;font-size:13px;font-weight:700;margin-bottom:${inputStr ? "8" : "0"}px">`,
+            escapeHtml(title),
+            `</div>`,
+            inputStr
+              ? `<pre style="color:#91a8c7;font-size:11px;margin:0;white-space:pre-wrap;overflow:auto;max-height:220px;line-height:1.5">${inputStr}</pre>`
+              : "",
+            `</div>`,
+          ].join("");
+        }}
         warmupTicks={120}
         cooldownTicks={200}
         d3AlphaDecay={0.04}
