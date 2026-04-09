@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import type { SessionInfo } from "@/hooks/useSSE";
 import type { ClaudeEvent } from "@/lib/types";
