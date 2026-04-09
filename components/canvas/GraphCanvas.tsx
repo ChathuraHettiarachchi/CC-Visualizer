@@ -131,6 +131,20 @@ function makeSessionLabel(text: string, color: string): THREE.Sprite {
 let startPulseFrame = 0;
 const startPulseMeshes: THREE.Mesh[] = [];
 
+let statusRingFrame = 0;
+const statusRingMeshes: THREE.Mesh[] = [];
+
+function makeStatusRing(size: number, color: string): THREE.Mesh {
+  const geo = new THREE.SphereGeometry(size + 2.5, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.5,
+    wireframe: true,
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
 function makeStartRing(size: number): THREE.Mesh {
   const geo = new THREE.SphereGeometry(size + 3, 16, 16);
   const mat = new THREE.MeshBasicMaterial({
@@ -182,6 +196,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   // Clear accumulated start-node pulse meshes when graph rebuilds
   useEffect(() => {
     startPulseMeshes.length = 0;
+    statusRingMeshes.length = 0;
   }, [events]);
 
   // Convert events → 3D graph data
@@ -508,13 +523,20 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           }
         }}
         onRenderFramePre={() => {
-          // Pulse the start node rings every frame regardless of simulation state
           startPulseFrame += 0.04;
           const scale = 1 + 0.28 * Math.sin(startPulseFrame);
           const opacity = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(startPulseFrame));
           startPulseMeshes.forEach((m) => {
             m.scale.setScalar(scale);
             (m.material as THREE.MeshBasicMaterial).opacity = opacity;
+          });
+
+          statusRingFrame += 0.05;
+          const ringScale = 1 + 0.2 * Math.sin(statusRingFrame);
+          const ringOpacity = 0.25 + 0.25 * (0.5 + 0.5 * Math.sin(statusRingFrame));
+          statusRingMeshes.forEach((m) => {
+            m.scale.setScalar(ringScale);
+            (m.material as THREE.MeshBasicMaterial).opacity = ringOpacity;
           });
         }}
       />
