@@ -47,6 +47,7 @@ export default function Home() {
           events={activeEvents}
           sessionId={activeId ?? ""}
           onNodeSelect={setSelectedNode}
+          sessionGroups={activeId === "__all" ? sessionEvents : undefined}
         />
       </div>
       <RightRail

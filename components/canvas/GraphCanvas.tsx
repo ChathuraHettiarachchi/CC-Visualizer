@@ -27,6 +27,7 @@ interface GraphCanvasProps {
   events: ClaudeEvent[];
   sessionId: string;
   onNodeSelect?: (node: SelectedNode | null) => void;
+  sessionGroups?: Map<string, ClaudeEvent[]>;
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -40,6 +41,8 @@ const TYPE_VAL: Record<string, number> = {
   notification: 9,
   stop:         11,
 };
+
+const SESSION_COLORS = ["#61d0ff","#7cf3c8","#ffbf69","#a78bfa","#f87171","#4ade80"];
 
 function makeNodeLabel(text: string): THREE.Sprite {
   const canvas = document.createElement("canvas");
@@ -59,11 +62,90 @@ function makeNodeLabel(text: string): THREE.Sprite {
   return sprite;
 }
 
+function makeSessionLabel(text: string, color: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 80;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, 320, 80);
+  ctx.font = "bold 26px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 160, 40);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(48, 12, 1);
+  return sprite;
+}
+
+function buildClusteredGraph(sessionGroups: Map<string, ClaudeEvent[]>) {
+  const allNodes: Record<string, unknown>[] = [];
+  const allLinks: Record<string, unknown>[] = [];
+
+  const entries = Array.from(sessionGroups.entries());
+  const count = entries.length;
+  const CLUSTER_RADIUS = count <= 1 ? 0 : Math.max(450, count * 160);
+
+  entries.forEach(([sessionId, events], sessionIndex) => {
+    const angle = (sessionIndex / count) * 2 * Math.PI;
+    const cx = count > 1 ? CLUSTER_RADIUS * Math.cos(angle) : 0;
+    const cz = count > 1 ? CLUSTER_RADIUS * Math.sin(angle) : 0;
+    const color = SESSION_COLORS[sessionIndex % SESSION_COLORS.length];
+    const sessionLabel = `Session ${sessionIndex + 1}`;
+
+    const { nodes, edges } = eventsToGraph(events);
+
+    // Pin each node to a spiral layout within the cluster
+    nodes.forEach((node, i) => {
+      const spiralAngle = (i / Math.max(nodes.length, 1)) * 4 * Math.PI;
+      const r = Math.min(30 + i * 14, 130);
+      allNodes.push({
+        id:           node.id,
+        type:         node.type,
+        data:         node.data,
+        sessionId,
+        sessionColor: color,
+        sessionLabel,
+        fx: cx + r * Math.cos(spiralAngle),
+        fy: (i % 5 - 2) * 28,
+        fz: cz + r * Math.sin(spiralAngle),
+      });
+    });
+
+    // Floating session label node at cluster top
+    allNodes.push({
+      id:           `__label_${sessionId}`,
+      type:         "__session_label",
+      data:         { label: sessionLabel },
+      sessionId,
+      sessionColor: color,
+      sessionLabel,
+      isLabel:      true,
+      fx: cx,
+      fy: 160,
+      fz: cz,
+    });
+
+    edges.forEach(e => {
+      allLinks.push({
+        source:       e.source,
+        target:       e.target,
+        isActive:     ((e.data as Record<string, unknown>)?.isActive ?? false) as boolean,
+        sessionColor: color,
+      });
+    });
+  });
+
+  return { nodes: allNodes, links: allLinks };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCanvasProps) {
+export default function GraphCanvas({ events, sessionId, onNodeSelect, sessionGroups }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 800, height: 600 });
 
@@ -81,6 +163,9 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
 
   // Convert events → 3D graph data (reuse existing eventsToGraph, strip position)
   const graphData = useMemo(() => {
+    if (sessionGroups && sessionGroups.size > 0) {
+      return buildClusteredGraph(sessionGroups);
+    }
     const { nodes, edges } = eventsToGraph(events);
     return {
       nodes: nodes.map((n) => ({
@@ -94,7 +179,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
         isActive: ((e.data as Record<string, unknown>)?.isActive ?? false) as boolean,
       })),
     };
-  }, [events]);
+  }, [events, sessionGroups]);
 
   // Reset camera when session changes
   const fgRef = useRef<ForceGraphMethods>(undefined);
@@ -106,6 +191,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
 
   const handleNodeClick = useCallback(
     (node: Record<string, unknown>) => {
+      if ((node as Record<string, unknown>).type === "__session_label") return;
       onNodeSelect?.({
         id:   node.id as string,
         type: node.type as string | undefined,
@@ -119,6 +205,8 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
     onNodeSelect?.(null);
   }, [onNodeSelect]);
 
+  const isClusterMode = !!(sessionGroups && sessionGroups.size > 0);
+
   return (
     <div
       ref={containerRef}
@@ -130,21 +218,34 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
         width={dims.width}
         height={dims.height}
         backgroundColor="#07111f"
-        nodeColor={(node: Record<string, unknown>) => TYPE_COLOR[node.type as string] ?? "#61d0ff"}
-        nodeVal={(node: Record<string, unknown>) => TYPE_VAL[node.type as string] ?? 4}
+        nodeColor={(node: Record<string, unknown>) =>
+          (node.sessionColor as string) ?? TYPE_COLOR[node.type as string] ?? "#61d0ff"
+        }
+        nodeVal={(node: Record<string, unknown>) => {
+          if (node.type === "__session_label") return 0;
+          return TYPE_VAL[node.type as string] ?? 4;
+        }}
         nodeResolution={16}
         nodeOpacity={0.92}
-        linkColor={() => "rgba(140,194,255,0.5)"}
+        linkColor={(link: Record<string, unknown>) => {
+          const c = link.sessionColor as string | undefined;
+          return c ? `${c}88` : "rgba(140,194,255,0.5)";
+        }}
         linkWidth={1.5}
         linkDirectionalArrowLength={4}
         linkDirectionalArrowColor={() => "rgba(140,194,255,0.6)"}
         linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={(link: Record<string, unknown>) => (link.isActive ? 4 : 0)}
-        linkDirectionalParticleColor={() => "#61d0ff"}
+        linkDirectionalParticleColor={(link: Record<string, unknown>) =>
+          (link.sessionColor as string) ?? "#61d0ff"
+        }
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleWidth={2}
-        nodeThreeObjectExtend={true}
+        nodeThreeObjectExtend={(node: Record<string, unknown>) => node.type !== "__session_label"}
         nodeThreeObject={(node: Record<string, unknown>) => {
+          if (node.type === "__session_label") {
+            return makeSessionLabel(node.sessionLabel as string, node.sessionColor as string);
+          }
           const label = node.type === "toolcall"
             ? ((node.data as Record<string, unknown>)?.toolName as string || "tool")
             : (node.type as string);
@@ -154,6 +255,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
           return sprite;
         }}
         nodeLabel={(node: Record<string, unknown>) => {
+          if (node.type === "__session_label") return "";
           const nData = (node.data as Record<string, unknown>) ?? {};
           const title = node.type === "toolcall"
             ? (nData.toolName as string || "Tool Call")
@@ -177,8 +279,8 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect }: GraphCa
             `</div>`,
           ].join("");
         }}
-        warmupTicks={120}
-        cooldownTicks={200}
+        warmupTicks={isClusterMode ? 0 : 120}
+        cooldownTicks={isClusterMode ? 0 : 200}
         d3AlphaDecay={0.04}
         d3VelocityDecay={0.5}
         showNavInfo={false}
