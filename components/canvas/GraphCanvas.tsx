@@ -71,6 +71,26 @@ function toolNodeSize(duration: number | null, minMs: number, maxMs: number): nu
   return Math.round(4 + t * 10); // range: 4–14
 }
 
+function formatNodeLabel(node: Record<string, unknown>): string {
+  const data = (node.data as Record<string, unknown>) ?? {};
+  if (node.type === "toolcall") {
+    const toolName = (data.toolName as string) ?? "tool";
+    const status = data.status as string;
+    const duration = data.duration as number | null;
+    if (status === "error") return `${toolName} ✕`;
+    if (status === "pending" || duration === null) return `${toolName} …`;
+    const durStr = duration >= 1000
+      ? `${(duration / 1000).toFixed(1)}s`
+      : `${duration}ms`;
+    return `${toolName} ${durStr}`;
+  }
+  if (node.type === "notification") {
+    const msg = (data.message as string) ?? "";
+    return msg.slice(0, 20);
+  }
+  return (node.type as string) ?? "stop";
+}
+
 function makeNodeLabel(text: string): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
