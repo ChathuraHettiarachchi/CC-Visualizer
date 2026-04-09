@@ -65,7 +65,7 @@ const COL_W  = 110;    // horizontal stride between nodes
 const ROW_H  = 80;     // vertical stride between rows
 const COLS   = 10;     // nodes per row
 const PAD_X  = 28;     // left/right padding
-const PAD_Y  = 42;     // top padding
+const PAD_Y  = 72;     // top padding — must clear the ~48px filter bar + ring overhang
 
 function nodePos(index: number) {
   const row = Math.floor(index / COLS);

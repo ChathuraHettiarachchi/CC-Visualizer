@@ -9,7 +9,6 @@ import Timeline from "@/components/panels/Timeline";
 import HeatmapPanel from "@/components/panels/HeatmapPanel";
 import BookmarkPanel from "@/components/panels/BookmarkPanel";
 import DiffPanel from "@/components/panels/DiffPanel";
-import WaterfallPanel from "@/components/panels/WaterfallPanel";
 import ErrorLogPanel from "@/components/panels/ErrorLogPanel";
 import { isBookmarked, addBookmark, removeBookmark } from "@/lib/bookmarks";
 
@@ -116,18 +115,10 @@ export default function RightRail({
       </RailPanel>
 
       {/* Timeline */}
-      <RailPanel eyebrow="Timeline" collapsible flex={1}>
-        <div style={{ overflowY: "auto", maxHeight: 200, flex: 1 }}>
+      <RailPanel eyebrow="Timeline" collapsible>
+        <div style={{ overflowY: "auto", maxHeight: 180 }}>
           <Timeline events={events} selectedNode={node} />
         </div>
-      </RailPanel>
-
-      {/* Waterfall */}
-      <RailPanel eyebrow="Waterfall" collapsible>
-        <WaterfallPanel
-          events={events}
-          onSelect={onSelectNodeById}
-        />
       </RailPanel>
 
       {/* Errors */}

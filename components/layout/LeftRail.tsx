@@ -1,6 +1,7 @@
 import type { SessionInfo } from "@/hooks/useSSE";
 import type { ClaudeEvent } from "@/lib/types";
 import AgentSkillPanel from "@/components/panels/AgentSkillPanel";
+import WaterfallPanel from "@/components/panels/WaterfallPanel";
 
 interface LeftRailProps {
   sessions: SessionInfo[];
@@ -158,6 +159,16 @@ export default function LeftRail({
 
       {/* ── Agents & Skills ────────────────────────────────────── */}
       <AgentSkillPanel events={events} />
+
+      {/* ── Waterfall ──────────────────────────────────────────── */}
+      {events.some(e => e.hook_event_name === "PreToolUse") && (
+        <div className="glass" style={{ padding: 14, flexShrink: 0 }}>
+          <div style={EYEBROW}>Waterfall</div>
+          <div style={{ marginTop: 8 }}>
+            <WaterfallPanel events={events} />
+          </div>
+        </div>
+      )}
 
       {/* ── Stats ──────────────────────────────────────────────── */}
       <div className="glass" style={{ padding: 14, flexShrink: 0 }}>
