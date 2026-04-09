@@ -134,6 +134,9 @@ const startPulseMeshes: THREE.Mesh[] = [];
 let statusRingFrame = 0;
 const statusRingMeshes: THREE.Mesh[] = [];
 
+// Tracks materials by node id for reactive color updates (heatmap / search)
+const nodeMaterialMap = new Map<string, THREE.MeshLambertMaterial>();
+
 function makeStatusRing(size: number, color: string): THREE.Mesh {
   const geo = new THREE.SphereGeometry(size + 2.5, 16, 16);
   const mat = new THREE.MeshBasicMaterial({
@@ -199,6 +202,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     startPulseMeshes.length = 0;
     statusRingMeshes.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
     statusRingMeshes.length = 0;
+    nodeMaterialMap.clear();
   }, [events]);
 
   // Convert events → 3D graph data
@@ -242,6 +246,47 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     if (durations.length === 0) return { min: 0, max: 0 };
     return { min: Math.min(...durations), max: Math.max(...durations) };
   }, [graphData.nodes]);
+
+  // Reactively update cached material colors when heatmap mode or search query changes
+  useEffect(() => {
+    nodeMaterialMap.forEach((mat, nodeId) => {
+      const node = graphData.nodes.find(
+        (n) => (n as Record<string, unknown>).id === nodeId
+      ) as Record<string, unknown> | undefined;
+      if (!node) return;
+
+      if (node.isStart) {
+        mat.color.set(START_COLOR);
+        mat.opacity = 1;
+        mat.needsUpdate = true;
+        return;
+      }
+
+      let base: string;
+      if (heatmapMode && node.type === "toolcall") {
+        const dur = ((node.data as Record<string, unknown>)?.duration as number | null) ?? null;
+        base = durationColor(dur, durationRange.min, durationRange.max);
+      } else if (node.type === "toolcall") {
+        const toolName = ((node.data as Record<string, unknown>)?.toolName as string) ?? "";
+        base = toolColor(toolName);
+      } else {
+        base = TYPE_COLOR[node.type as string] ?? "#61d0ff";
+      }
+
+      if (searchQuery) {
+        const matchLabel = node.type === "toolcall"
+          ? (((node.data as Record<string, unknown>)?.toolName as string) ?? "tool")
+          : (node.type as string);
+        const matches = matchLabel.toLowerCase().includes(searchQuery.toLowerCase());
+        mat.color.set(matches ? base : "#0a1628");
+        mat.opacity = matches ? 1 : 0.15;
+      } else {
+        mat.color.set(base);
+        mat.opacity = 1;
+      }
+      mat.needsUpdate = true;
+    });
+  }, [heatmapMode, searchQuery, durationRange, graphData.nodes]);
 
   // ── Follow mode ───────────────────────────────────────────────────────────
   // When active, every new node added to the end auto-selects and the camera follows it.
@@ -445,30 +490,76 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
         }
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleWidth={2}
-        nodeThreeObjectExtend={(node: Record<string, unknown>) => node.type !== "__session_label"}
+        nodeThreeObjectExtend={false}
         nodeThreeObject={(node: Record<string, unknown>) => {
+          // Session labels: sprite only, no geometry
           if (node.type === "__session_label") {
             return makeSessionLabel(node.sessionLabel as string, node.sessionColor as string);
           }
-          const label = node.type === "toolcall"
-            ? ((node.data as Record<string, unknown>)?.toolName as string || "tool")
-            : (node.type as string);
-          const size = TYPE_VAL[node.type as string] ?? 5;
 
-          if (node.isStart) {
-            // Group: label sprite + pulsing ring
-            const group = new THREE.Group();
-            const sprite = makeNodeLabel(label);
-            sprite.position.y = size + 7;
-            group.add(sprite);
-            const ring = makeStartRing(size);
-            group.add(ring);
-            return group;
+          const data = (node.data as Record<string, unknown>) ?? {};
+          const status = data.status as string | undefined;
+          const toolName = (data.toolName as string) ?? "";
+          const duration = data.duration as number | null;
+          const size = node.type === "toolcall"
+            ? toolNodeSize(duration, durationRange.min, durationRange.max)
+            : (TYPE_VAL[node.type as string] ?? 5);
+
+          // Geometry by status (toolcall only; others use sphere)
+          let geometry: THREE.BufferGeometry;
+          if (node.type === "toolcall") {
+            if (status === "error") {
+              geometry = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
+            } else if (status === "pending") {
+              geometry = new THREE.OctahedronGeometry(size);
+            } else {
+              geometry = new THREE.SphereGeometry(size, 16, 16);
+            }
+          } else {
+            geometry = new THREE.SphereGeometry(size, 16, 16);
           }
 
-          const sprite = makeNodeLabel(label);
+          // Material color (initial; useEffect keeps it reactive)
+          let baseColor: string;
+          if (node.isStart) {
+            baseColor = START_COLOR;
+          } else if (heatmapMode && node.type === "toolcall") {
+            baseColor = durationColor(duration, durationRange.min, durationRange.max);
+          } else if (node.type === "toolcall") {
+            baseColor = toolColor(toolName);
+          } else {
+            baseColor = TYPE_COLOR[node.type as string] ?? "#61d0ff";
+          }
+
+          const mat = new THREE.MeshLambertMaterial({
+            color: baseColor,
+            transparent: true,
+            opacity: 1,
+          });
+          nodeMaterialMap.set(node.id as string, mat);
+
+          const group = new THREE.Group();
+          group.add(new THREE.Mesh(geometry, mat));
+
+          // Label sprite above the mesh
+          const sprite = makeNodeLabel(formatNodeLabel(node));
           sprite.position.y = size + 7;
-          return sprite;
+          group.add(sprite);
+
+          // Status ring: pulsing amber for pending, static red for error, green for start
+          if (node.isStart) {
+            const ring = makeStartRing(size);
+            group.add(ring);
+          } else if (node.type === "toolcall" && status === "pending") {
+            const ring = makeStatusRing(size, "#ffbf69");
+            statusRingMeshes.push(ring);
+            group.add(ring);
+          } else if (node.type === "toolcall" && status === "error") {
+            group.add(makeStatusRing(size, "#f87171"));
+            // error ring stays at fixed opacity — not pushed to statusRingMeshes
+          }
+
+          return group;
         }}
         nodeLabel={(node: Record<string, unknown>) => {
           if (node.type === "__session_label") return "";
