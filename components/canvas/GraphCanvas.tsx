@@ -127,16 +127,6 @@ function makeSessionLabel(text: string, color: string): THREE.Sprite {
   return sprite;
 }
 
-// Animated pulsing ring around the start node
-let startPulseFrame = 0;
-const startPulseMeshes: THREE.Mesh[] = [];
-
-let statusRingFrame = 0;
-const statusRingMeshes: THREE.Mesh[] = [];
-
-// Tracks materials by node id for reactive color updates (heatmap / search)
-const nodeMaterialMap = new Map<string, THREE.MeshLambertMaterial>();
-
 function makeStatusRing(size: number, color: string): THREE.Mesh {
   const geo = new THREE.SphereGeometry(size + 2.5, 16, 16);
   const mat = new THREE.MeshBasicMaterial({
@@ -156,9 +146,7 @@ function makeStartRing(size: number): THREE.Mesh {
     opacity: 0.35,
     wireframe: true,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  startPulseMeshes.push(mesh);
-  return mesh;
+  return new THREE.Mesh(geo, mat);
 }
 
 function escapeHtml(s: string): string {
@@ -184,6 +172,13 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Mutable animation state — kept in refs so Strict Mode double-invoke doesn't corrupt them
+  const startPulseFrameRef = useRef(0);
+  const startPulseMeshesRef = useRef<THREE.Mesh[]>([]);
+  const statusRingFrameRef = useRef(0);
+  const statusRingMeshesRef = useRef<THREE.Mesh[]>([]);
+  const nodeMaterialMapRef = useRef(new Map<string, THREE.MeshLambertMaterial>());
+
   // Track container size so the 3D canvas fills its parent
   useEffect(() => {
     const el = containerRef.current;
@@ -198,11 +193,11 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
   // Clear accumulated start-node pulse meshes when graph rebuilds
   useEffect(() => {
-    startPulseMeshes.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
-    startPulseMeshes.length = 0;
-    statusRingMeshes.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
-    statusRingMeshes.length = 0;
-    nodeMaterialMap.clear();
+    startPulseMeshesRef.current.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
+    startPulseMeshesRef.current = [];
+    statusRingMeshesRef.current.forEach((m) => { m.geometry.dispose(); (m.material as THREE.MeshBasicMaterial).dispose(); });
+    statusRingMeshesRef.current = [];
+    nodeMaterialMapRef.current.clear();
   }, [events]);
 
   // Convert events → 3D graph data
@@ -249,7 +244,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
 
   // Reactively update cached material colors when heatmap mode or search query changes
   useEffect(() => {
-    nodeMaterialMap.forEach((mat, nodeId) => {
+    nodeMaterialMapRef.current.forEach((mat, nodeId) => {
       const node = graphData.nodes.find(
         (n) => (n as Record<string, unknown>).id === nodeId
       ) as Record<string, unknown> | undefined;
@@ -436,6 +431,79 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
     [graphData.nodes, onNodeSelect]
   );
 
+  const nodeThreeObjectFn = useCallback((node: Record<string, unknown>) => {
+    // Session labels: sprite only, no geometry
+    if (node.type === "__session_label") {
+      return makeSessionLabel(node.sessionLabel as string, node.sessionColor as string);
+    }
+
+    const data = (node.data as Record<string, unknown>) ?? {};
+    const status = data.status as string | undefined;
+    const toolName = (data.toolName as string) ?? "";
+    const duration = data.duration as number | null;
+    const size = node.type === "toolcall"
+      ? toolNodeSize(duration, durationRange.min, durationRange.max)
+      : (TYPE_VAL[node.type as string] ?? 5);
+
+    // Geometry by status (toolcall only; others use sphere)
+    let geometry: THREE.BufferGeometry;
+    if (node.type === "toolcall") {
+      if (status === "error") {
+        geometry = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
+      } else if (status === "pending") {
+        geometry = new THREE.OctahedronGeometry(size);
+      } else {
+        geometry = new THREE.SphereGeometry(size, 16, 16);
+      }
+    } else {
+      geometry = new THREE.SphereGeometry(size, 16, 16);
+    }
+
+    // Material color (initial; useEffect keeps it reactive)
+    let baseColor: string;
+    if (node.isStart) {
+      baseColor = START_COLOR;
+    } else if (heatmapMode && node.type === "toolcall") {
+      baseColor = durationColor(duration, durationRange.min, durationRange.max);
+    } else if (node.type === "toolcall") {
+      baseColor = toolColor(toolName);
+    } else {
+      baseColor = TYPE_COLOR[node.type as string] ?? "#61d0ff";
+    }
+
+    const mat = new THREE.MeshLambertMaterial({
+      color: baseColor,
+      transparent: true,
+      opacity: 1,
+    });
+    nodeMaterialMapRef.current.set(node.id as string, mat);
+
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(geometry, mat));
+
+    // Label sprite above the mesh
+    const sprite = makeNodeLabel(formatNodeLabel(node));
+    sprite.position.y = size + 7;
+    group.add(sprite);
+
+    // Status ring: pulsing amber for pending, static red for error, green for start
+    if (node.isStart) {
+      const ring = makeStartRing(size);
+      startPulseMeshesRef.current.push(ring);
+      group.add(ring);
+    } else if (node.type === "toolcall" && status === "pending") {
+      const ring = makeStatusRing(size, "#ffbf69");
+      statusRingMeshesRef.current.push(ring);
+      group.add(ring);
+    } else if (node.type === "toolcall" && status === "error") {
+      group.add(makeStatusRing(size, "#f87171"));
+      // error ring stays at fixed opacity — not pushed to statusRingMeshesRef
+    }
+
+    return group;
+  }, [heatmapMode, durationRange]);
+  // Note: nodeMaterialMapRef, statusRingMeshesRef, startPulseMeshesRef are stable refs — no dep needed
+
   return (
     <div
       ref={containerRef}
@@ -491,76 +559,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleWidth={2}
         nodeThreeObjectExtend={false}
-        nodeThreeObject={(node: Record<string, unknown>) => {
-          // Session labels: sprite only, no geometry
-          if (node.type === "__session_label") {
-            return makeSessionLabel(node.sessionLabel as string, node.sessionColor as string);
-          }
-
-          const data = (node.data as Record<string, unknown>) ?? {};
-          const status = data.status as string | undefined;
-          const toolName = (data.toolName as string) ?? "";
-          const duration = data.duration as number | null;
-          const size = node.type === "toolcall"
-            ? toolNodeSize(duration, durationRange.min, durationRange.max)
-            : (TYPE_VAL[node.type as string] ?? 5);
-
-          // Geometry by status (toolcall only; others use sphere)
-          let geometry: THREE.BufferGeometry;
-          if (node.type === "toolcall") {
-            if (status === "error") {
-              geometry = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
-            } else if (status === "pending") {
-              geometry = new THREE.OctahedronGeometry(size);
-            } else {
-              geometry = new THREE.SphereGeometry(size, 16, 16);
-            }
-          } else {
-            geometry = new THREE.SphereGeometry(size, 16, 16);
-          }
-
-          // Material color (initial; useEffect keeps it reactive)
-          let baseColor: string;
-          if (node.isStart) {
-            baseColor = START_COLOR;
-          } else if (heatmapMode && node.type === "toolcall") {
-            baseColor = durationColor(duration, durationRange.min, durationRange.max);
-          } else if (node.type === "toolcall") {
-            baseColor = toolColor(toolName);
-          } else {
-            baseColor = TYPE_COLOR[node.type as string] ?? "#61d0ff";
-          }
-
-          const mat = new THREE.MeshLambertMaterial({
-            color: baseColor,
-            transparent: true,
-            opacity: 1,
-          });
-          nodeMaterialMap.set(node.id as string, mat);
-
-          const group = new THREE.Group();
-          group.add(new THREE.Mesh(geometry, mat));
-
-          // Label sprite above the mesh
-          const sprite = makeNodeLabel(formatNodeLabel(node));
-          sprite.position.y = size + 7;
-          group.add(sprite);
-
-          // Status ring: pulsing amber for pending, static red for error, green for start
-          if (node.isStart) {
-            const ring = makeStartRing(size);
-            group.add(ring);
-          } else if (node.type === "toolcall" && status === "pending") {
-            const ring = makeStatusRing(size, "#ffbf69");
-            statusRingMeshes.push(ring);
-            group.add(ring);
-          } else if (node.type === "toolcall" && status === "error") {
-            group.add(makeStatusRing(size, "#f87171"));
-            // error ring stays at fixed opacity — not pushed to statusRingMeshes
-          }
-
-          return group;
-        }}
+        nodeThreeObject={nodeThreeObjectFn}
         nodeLabel={(node: Record<string, unknown>) => {
           if (node.type === "__session_label") return "";
           const nData = (node.data as Record<string, unknown>) ?? {};
@@ -616,18 +615,18 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
           }
         }}
         onRenderFramePre={() => {
-          startPulseFrame += 0.04;
-          const scale = 1 + 0.28 * Math.sin(startPulseFrame);
-          const opacity = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(startPulseFrame));
-          startPulseMeshes.forEach((m) => {
+          startPulseFrameRef.current += 0.04;
+          const scale = 1 + 0.28 * Math.sin(startPulseFrameRef.current);
+          const opacity = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(startPulseFrameRef.current));
+          startPulseMeshesRef.current.forEach((m) => {
             m.scale.setScalar(scale);
             (m.material as THREE.MeshBasicMaterial).opacity = opacity;
           });
 
-          statusRingFrame += 0.05;
-          const ringScale = 1 + 0.2 * Math.sin(statusRingFrame);
-          const ringOpacity = 0.25 + 0.25 * (0.5 + 0.5 * Math.sin(statusRingFrame));
-          statusRingMeshes.forEach((m) => {
+          statusRingFrameRef.current += 0.05;
+          const ringScale = 1 + 0.2 * Math.sin(statusRingFrameRef.current);
+          const ringOpacity = 0.25 + 0.25 * (0.5 + 0.5 * Math.sin(statusRingFrameRef.current));
+          statusRingMeshesRef.current.forEach((m) => {
             m.scale.setScalar(ringScale);
             (m.material as THREE.MeshBasicMaterial).opacity = ringOpacity;
           });
