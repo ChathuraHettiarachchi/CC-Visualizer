@@ -46,7 +46,7 @@ export default function HeatmapPanel({ events }: HeatmapPanelProps) {
   const maxCount = files[0]?.count ?? 1;
 
   return (
-    <div style={{ overflowY: "auto", fontFamily: "var(--font-ibm-plex-mono), monospace", flex: 1 }}>
+    <div style={{ fontFamily: "var(--font-ibm-plex-mono), monospace" }}>
       {files.length === 0 ? (
         <div
           style={{
@@ -66,7 +66,7 @@ export default function HeatmapPanel({ events }: HeatmapPanelProps) {
           return (
             <div
               key={path}
-              style={{ padding: "6px 0 8px" }}
+              style={{ padding: "3px 0 4px" }}
             >
               {/* File name + count */}
               <div

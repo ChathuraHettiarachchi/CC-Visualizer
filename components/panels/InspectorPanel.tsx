@@ -9,7 +9,7 @@ interface InspectorPanelProps {
 
 export default function InspectorPanel({ node, events: _events }: InspectorPanelProps) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: "100%" }}>
+    <div>
       <NodeDetail node={node} />
     </div>
   );

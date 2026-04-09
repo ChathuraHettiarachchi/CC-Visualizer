@@ -244,6 +244,28 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
   const [view2D, setView2D] = useState(false);
   const flow2DRef = useRef<FlowView2DHandle>(null);
 
+  // ── 2D→3D: reset OrbitControls so the 3D graph is immediately interactive ─
+  const prevView2DRef = useRef(false);
+  useEffect(() => {
+    if (prevView2DRef.current && !view2D) {
+      // Switched from 2D → 3D. After React removes the overlay from the DOM,
+      // toggle controls.enabled to clear any stuck pointer state, then fire a
+      // resize so the renderer re-checks its container dimensions.
+      const frame = requestAnimationFrame(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const controls = (fgRef.current as any)?.controls?.();
+        if (controls) {
+          controls.enabled = false;
+          controls.enabled = true;
+          controls.update?.();
+        }
+        window.dispatchEvent(new Event("resize"));
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    prevView2DRef.current = view2D;
+  }, [view2D]);
+
   const durationRange = useMemo(() => {
     const durations = graphData.nodes
       .map(n => ((n as Record<string, unknown>).data as Record<string, unknown>)?.duration as number | null)
@@ -496,6 +518,7 @@ export default function GraphCanvas({ events, sessionId, onNodeSelect, onSecondN
             ref={flow2DRef}
             events={events}
             heatmapMode={heatmapMode}
+            searchQuery={searchQuery}
             onNodeClick={(id) => {
               const node = graphData.nodes.find(n => (n as Record<string, unknown>).id === id) as Record<string, unknown> | undefined;
               if (!node || node.type === "__session_label") return;

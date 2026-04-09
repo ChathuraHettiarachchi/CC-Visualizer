@@ -107,7 +107,7 @@ export default function EventFeed({ events }: EventFeedProps) {
   }, [events]);
 
   return (
-    <div style={{ borderTop: "1px solid var(--line)", background: "rgba(7,17,31,0.9)", flexShrink: 0 }}>
+    <div style={{ background: "rgba(7,17,31,0.9)", flexShrink: 0, borderRadius: 16, overflow: "hidden", border: "1px solid var(--line)", marginTop: 8 }}>
       <button
         onClick={() => setCollapsed(c => !c)}
         style={{

@@ -20,6 +20,7 @@ interface FlowView2DProps {
   onNodeClick?: (id: string) => void;
   selectedId?: string | null;
   heatmapMode?: boolean;
+  searchQuery?: string;
 }
 
 export interface FlowView2DHandle {
@@ -82,7 +83,7 @@ function fmtDur(ms: number | null) {
 }
 
 const FlowView2D = forwardRef<FlowView2DHandle, FlowView2DProps>(
-function FlowView2D({ events, onNodeClick, selectedId, heatmapMode = false }, ref) {
+function FlowView2D({ events, onNodeClick, selectedId, heatmapMode = false, searchQuery = "" }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -263,11 +264,13 @@ function FlowView2D({ events, onNodeClick, selectedId, heatmapMode = false }, re
           const isSelected = node.id === selectedId;
           const isHovered  = node.id === hoveredId;
           const glow = isSelected || isHovered;
+          const matchesSearch = !searchQuery || node.label.toLowerCase().includes(searchQuery.toLowerCase());
+          const nodeOpacity = matchesSearch ? 1 : 0.12;
 
           return (
             <g
               key={node.id}
-              style={{ cursor: "pointer" }}
+              style={{ cursor: "pointer", opacity: nodeOpacity, transition: "opacity 0.2s" }}
               onClick={() => onNodeClick?.(node.id)}
               onMouseEnter={() => setHoveredId(node.id)}
               onMouseLeave={() => setHoveredId(null)}

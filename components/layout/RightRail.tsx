@@ -57,32 +57,62 @@ export default function RightRail({
 
   // ── Stats computation ──────────────────────────────────────────────
   const { globalStats, contextUsage } = (() => {
-    let inputChars = 0, outputChars = 0;
-    for (const e of events) {
-      if (e.hook_event_name === "PreToolUse") {
-        inputChars += JSON.stringify((e as { tool_input: unknown }).tool_input ?? {}).length;
-      } else if (e.hook_event_name === "PostToolUse") {
-        outputChars += String((e as { tool_response: unknown }).tool_response ?? "").length;
+    // Sort all events chronologically for the cumulative context walk
+    const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Build a map of tool_use_id → response char count
+    const postMap = new Map<string, number>();
+    for (const e of sorted) {
+      if (e.hook_event_name === "PostToolUse") {
+        postMap.set(
+          (e as { tool_use_id: string }).tool_use_id,
+          String((e as { tool_response: unknown }).tool_response ?? "").length,
+        );
       }
     }
-    const inTok  = Math.round(inputChars  / 4);
-    const outTok = Math.round(outputChars / 4);
-    const cost   = (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+
+    // Walk turns in order; for each tool call the API input = full context so far
+    let cumulativeChars = 0;
+    let outTokTotal = 0;
+    let sessionCost = 0;
+    const seen = new Set<string>();
+
+    for (const e of sorted) {
+      if (e.hook_event_name === "PreToolUse") {
+        const id = (e as { tool_use_id: string }).tool_use_id;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        cumulativeChars += JSON.stringify((e as { tool_input: unknown }).tool_input ?? {}).length;
+        const responseChars = postMap.get(id) ?? 0;
+        const inTok  = cumulativeChars / 4;
+        const outTok = responseChars / 4;
+        sessionCost  += (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+        outTokTotal  += outTok;
+        cumulativeChars += responseChars;
+      } else if (e.hook_event_name === "Notification") {
+        cumulativeChars += ((e as { message?: string }).message ?? "").length;
+      }
+    }
+
+    const totalInTok  = Math.round(cumulativeChars / 4);
+    const totalOutTok = Math.round(outTokTotal);
     const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+
     const pending = events.filter(e => e.hook_event_name === "PreToolUse");
     const done = new Set(
       events.filter(e => e.hook_event_name === "PostToolUse")
         .map(e => (e as { tool_use_id: string }).tool_use_id)
     );
     const active = pending.find(e => !done.has((e as { tool_use_id: string }).tool_use_id));
+
     return {
       globalStats: [
         { label: "Events",   value: events.length },
         { label: "Tools",    value: pending.length },
         { label: "Active",   value: active ? (active as { tool_name: string }).tool_name : "—" },
-        { label: "~Cost",    value: cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}` },
-        { label: "~In tok",  value: fmtTok(inTok) },
-        { label: "~Out tok", value: fmtTok(outTok) },
+        { label: "~Cost",    value: sessionCost < 0.01 ? "<$0.01" : `$${sessionCost.toFixed(2)}` },
+        { label: "~In tok",  value: fmtTok(totalInTok) },
+        { label: "~Out tok", value: fmtTok(totalOutTok) },
       ] as Array<{ label: string; value: string | number }>,
       contextUsage: estimateContextUsage(events),
     };
