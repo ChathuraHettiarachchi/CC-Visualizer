@@ -24,8 +24,18 @@ export async function GET(request: Request): Promise<Response> {
 
       eventBus.on("event", listener);
 
+      // Keepalive ping every 15s — prevents browser from dropping the connection
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": ping\n\n"));
+        } catch {
+          clearInterval(keepalive);
+        }
+      }, 15_000);
+
       // Clean up when client disconnects
       request.signal.addEventListener("abort", () => {
+        clearInterval(keepalive);
         eventBus.off("event", listener);
         try {
           controller.close();

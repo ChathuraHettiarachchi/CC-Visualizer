@@ -25,6 +25,7 @@ export function useSSE() {
   const [sessions, setSessions]           = useState<SessionInfo[]>([]);
   const [sessionEvents, setSessionEvents] = useState<Map<string, ClaudeEvent[]>>(new Map());
   const [connected, setConnected]         = useState(false);
+  const [childSessions, setChildSessions] = useState<Map<string, string[]>>(new Map());
 
   useEffect(() => {
     const es = new EventSource("/api/events");
@@ -91,19 +92,25 @@ export function useSSE() {
         sessionMap.current.get(targetId)!.lastSeen = timestamp;
       }
 
-      // Append to target session's event list
-      if (!eventsBySession.current.has(targetId)) {
-        eventsBySession.current.set(targetId, []);
-      }
-      eventsBySession.current.get(targetId)!.push(event);
+      // Append to target session's event list (new array reference so downstream useMemos recompute)
+      const existing = eventsBySession.current.get(targetId) ?? [];
+      eventsBySession.current.set(targetId, [...existing, event]);
+
+      // Rebuild child session map
+      const childMap = new Map<string, string[]>();
+      parentMap.current.forEach((parentId, childId) => {
+        if (!childMap.has(parentId)) childMap.set(parentId, []);
+        childMap.get(parentId)!.push(childId);
+      });
 
       // Trigger re-render
       setSessions(Array.from(sessionMap.current.values()));
       setSessionEvents(new Map(eventsBySession.current));
+      setChildSessions(new Map(childMap));
     };
 
     return () => es.close();
   }, []);
 
-  return { sessions, connected, sessionEvents };
+  return { sessions, connected, sessionEvents, childSessions };
 }

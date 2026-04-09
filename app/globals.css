@@ -55,6 +55,16 @@ html, body {
   50%       { transform: scale(1.04); opacity: 0.95; }
 }
 
+/* ─── Live dot blink ─────────────────────────────── */
+@keyframes liveBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+.live-dot {
+  animation: liveBlink 1.2s ease-in-out infinite;
+}
+
 /* ─── Edge breath animation ──────────────────────── */
 @keyframes edgeBreath {
   0%, 100% { opacity: 0.46; }
