@@ -1,11 +1,13 @@
 import type { SessionInfo } from "@/hooks/useSSE";
 import type { ClaudeEvent } from "@/lib/types";
+import AgentSkillPanel from "@/components/panels/AgentSkillPanel";
 
 interface LeftRailProps {
   sessions: SessionInfo[];
   activeId: string | null;
   onSelect: (id: string) => void;
   events: ClaudeEvent[];
+  childSessions: Map<string, string[]>;
 }
 
 function statValue(events: ClaudeEvent[], key: string): number | string {
@@ -22,7 +24,7 @@ function statValue(events: ClaudeEvent[], key: string): number | string {
   return 0;
 }
 
-export default function LeftRail({ sessions, activeId, onSelect, events }: LeftRailProps) {
+export default function LeftRail({ sessions, activeId, onSelect, events, childSessions }: LeftRailProps) {
   const metrics = [
     { label: "Events",     value: statValue(events, "events") },
     { label: "Tool Calls", value: statValue(events, "toolCalls") },
@@ -42,63 +44,60 @@ export default function LeftRail({ sessions, activeId, onSelect, events }: LeftR
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {/* All Sessions synthetic tab */}
-            <button
-              onClick={() => onSelect("__all")}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: `1px solid ${activeId === "__all" ? "rgba(124,243,200,0.34)" : "rgba(123,178,255,0.14)"}`,
-                background: activeId === "__all" ? "rgba(124,243,200,0.08)" : "rgba(255,255,255,0.025)",
-                boxShadow: activeId === "__all" ? "0 0 0 1px rgba(124,243,200,0.15)" : "none",
-                cursor: "pointer",
-                color: activeId === "__all" ? "var(--accent-2)" : "var(--muted)",
-                fontFamily: "var(--font-ibm-plex-mono), monospace",
-                fontSize: 12,
-                fontWeight: activeId === "__all" ? 700 : 400,
-                transition: "all 0.15s",
-                marginBottom: 4,
-              }}
-            >
-              All Sessions
-            </button>
             {sessions.map((s) => {
               const isActive = s.id === activeId;
+              const children = childSessions.get(s.id) ?? [];
               return (
-                <button
-                  key={s.id}
-                  onClick={() => onSelect(s.id)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    borderRadius: 14,
-                    border: `1px solid ${isActive ? "rgba(97,208,255,0.34)" : "rgba(123,178,255,0.14)"}`,
-                    background: isActive ? "rgba(97,208,255,0.08)" : "rgba(255,255,255,0.025)",
-                    boxShadow: isActive ? "0 0 0 1px rgba(97,208,255,0.15)" : "none",
-                    cursor: "pointer",
-                    color: "var(--text)",
-                    fontFamily: "var(--font-ibm-plex-mono), monospace",
-                    fontSize: 12,
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {s.label}
-                  {s.subagentCount > 0 && (
-                    <div style={{ color: "var(--muted)", fontSize: 10, marginTop: 3, marginLeft: 8 }}>
-                      ↳ {s.subagentCount} subagent{s.subagentCount > 1 ? "s" : ""}
-                    </div>
-                  )}
-                </button>
+                <div key={s.id}>
+                  <button
+                    onClick={() => onSelect(s.id)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      border: `1px solid ${isActive ? "rgba(97,208,255,0.34)" : "rgba(123,178,255,0.14)"}`,
+                      background: isActive ? "rgba(97,208,255,0.08)" : "rgba(255,255,255,0.025)",
+                      boxShadow: isActive ? "0 0 0 1px rgba(97,208,255,0.15)" : "none",
+                      cursor: "pointer",
+                      color: "var(--text)",
+                      fontFamily: "var(--font-ibm-plex-mono), monospace",
+                      fontSize: 12,
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                  {children.map(childId => {
+                    const isChildActive = childId === activeId;
+                    return (
+                      <button
+                        key={childId}
+                        onClick={() => onSelect(childId)}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          padding: "7px 12px 7px 24px", borderRadius: 14, marginTop: 4,
+                          border: `1px solid ${isChildActive ? "rgba(167,139,250,0.34)" : "rgba(123,178,255,0.10)"}`,
+                          background: isChildActive ? "rgba(167,139,250,0.08)" : "rgba(255,255,255,0.015)",
+                          cursor: "pointer", color: "var(--muted)",
+                          fontFamily: "var(--font-ibm-plex-mono), monospace", fontSize: 11,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        ↳ subagent
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Agents & Skills panel */}
+      <AgentSkillPanel events={events} />
 
       {/* Stats panel */}
       <div className="glass" style={{ padding: 16 }}>
