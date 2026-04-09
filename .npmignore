@@ -1,0 +1,9 @@
+# Runtime session data — never publish
+.cc-visualizer/
+.next/standalone/.cc-visualizer/
+
+# Dev/source files not needed in the package
+.paul/
+docs/
+*.log
+.env*

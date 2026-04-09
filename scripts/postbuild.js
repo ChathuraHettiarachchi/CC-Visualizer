@@ -23,6 +23,13 @@ if (!fs.existsSync(standalone)) {
 cpSync(staticSrc, staticDst);
 cpSync(publicSrc, publicDst);
 
+// Remove any runtime data that ended up inside the standalone dir during dev
+const runtimeDir = path.join(standalone, '.cc-visualizer');
+if (fs.existsSync(runtimeDir)) {
+  fs.rmSync(runtimeDir, { recursive: true, force: true });
+  console.log('postbuild: removed .cc-visualizer runtime data from standalone ✓');
+}
+
 console.log('postbuild: standalone assets copied ✓');
 
 function cpSync(src, dst) {
