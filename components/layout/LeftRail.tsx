@@ -6,6 +6,7 @@ import type { ClaudeEvent } from "@/lib/types";
 import type { SessionMeta } from "@/lib/session-store";
 import AgentSkillPanel from "@/components/panels/AgentSkillPanel";
 import WaterfallPanel from "@/components/panels/WaterfallPanel";
+import { estimateContextUsage } from "@/lib/context-estimate";
 
 interface LeftRailProps {
   sessions: SessionInfo[];
@@ -84,6 +85,8 @@ export default function LeftRail({
     { label: "~Out tok", value: fmtTok(estOutputTokens) },
     { label: "~Cost",    value: estCostUsd < 0.01 ? "<$0.01" : `$${estCostUsd.toFixed(2)}` },
   ];
+
+  const contextUsage = estimateContextUsage(events);
 
   return (
     // Full-height scrollable column
@@ -272,6 +275,32 @@ export default function LeftRail({
               </div>
             </div>
           ))}
+        </div>
+        {/* Context window bar */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "baseline",
+            marginBottom: 5,
+          }}>
+            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
+              Context window
+            </span>
+            <span style={{ ...MONO, fontSize: 9, color: "var(--muted)" }}>
+              ~{contextUsage.percentage}%
+            </span>
+          </div>
+          <div style={{ height: 4, background: "var(--line)", borderRadius: 2 }}>
+            <div style={{
+              height: "100%",
+              width: `${contextUsage.percentage}%`,
+              borderRadius: 2,
+              background: contextUsage.percentage < 60 ? "#22c55e" : contextUsage.percentage < 85 ? "#ffbf69" : "#f87171",
+              transition: "width 0.3s ease",
+            }} />
+          </div>
+          <div style={{ ...MONO, fontSize: 9, color: "rgba(140,194,255,0.35)", marginTop: 3 }}>
+            ~{(contextUsage.usedTokens / 1000).toFixed(1)}k / {(contextUsage.totalTokens / 1000).toFixed(0)}k tokens
+          </div>
         </div>
       </div>
 
