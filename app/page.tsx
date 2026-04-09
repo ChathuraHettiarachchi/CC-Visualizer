@@ -11,6 +11,8 @@ import { eventsToGraph } from "@/lib/events-to-graph";
 import { useSavedSessions } from "@/hooks/useSavedSessions";
 import type { SessionMeta } from "@/lib/session-store";
 import type { ClaudeEvent } from "@/lib/types";
+import { useAlerts } from "@/hooks/useAlerts";
+import { ToastContainer } from "@/components/ui/Toast";
 
 export default function Home() {
   const { sessions, sessionEvents, connected, childSessions } = useSSE();
@@ -31,6 +33,7 @@ export default function Home() {
 
   const activeEvents = savedSession?.events ?? (activeId ? sessionEvents.get(activeId) : undefined) ?? [];
   const isReadOnly = savedSession !== null;
+  const { toasts, dismiss } = useAlerts(activeEvents);
 
   async function loadSavedSession(meta: SessionMeta) {
     try {
@@ -134,6 +137,7 @@ export default function Home() {
         onClearCompare={() => setCompareNode(null)}
         onSelectNodeById={selectNodeById}
       />
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
