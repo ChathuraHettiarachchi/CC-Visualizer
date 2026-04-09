@@ -18,6 +18,7 @@ interface GraphItem {
   id: string;
   type: "toolcall" | "notification" | "stop";
   data: Record<string, unknown>;
+  isStart?: boolean;
 }
 
 export function eventsToGraph(events: ClaudeEvent[]): {
@@ -56,15 +57,25 @@ export function eventsToGraph(events: ClaudeEvent[]): {
       if (!seenToolUseIds.has(event.tool_use_id)) {
         seenToolUseIds.add(event.tool_use_id);
         const entry = toolCallMap.get(event.tool_use_id)!;
+        const duration = entry.post
+          ? entry.post.timestamp - entry.pre.timestamp
+          : null;
+        const isError = entry.post
+          ? (typeof entry.post.tool_response === "string" &&
+             /error|exception|failed|traceback/i.test(entry.post.tool_response.slice(0, 500)))
+          : false;
+
         graphItems.push({
           id: `tool-${event.tool_use_id}`,
           type: "toolcall",
+          isStart: graphItems.length === 0,
           data: {
             toolName: event.tool_name,
             toolInput: event.tool_input,
             toolResponse: entry.post?.tool_response ?? undefined,
-            status: entry.post ? "complete" : "pending",
+            status: isError ? "error" : entry.post ? "complete" : "pending",
             timestamp: event.timestamp,
+            duration,
           },
         });
       }
@@ -74,6 +85,7 @@ export function eventsToGraph(events: ClaudeEvent[]): {
       graphItems.push({
         id: `notif-${event.timestamp}-${i}`,
         type: "notification",
+        isStart: graphItems.length === 0,
         data: { message: event.message, timestamp: event.timestamp },
       });
     } else if (
@@ -83,6 +95,7 @@ export function eventsToGraph(events: ClaudeEvent[]): {
       graphItems.push({
         id: `stop-${event.timestamp}-${i}`,
         type: "stop",
+        isStart: graphItems.length === 0,
         data: { eventType: event.hook_event_name, timestamp: event.timestamp },
       });
     }
@@ -94,27 +107,16 @@ export function eventsToGraph(events: ClaudeEvent[]): {
     // Snake: even rows left-to-right, odd rows right-to-left
     const x = (row % 2 === 0) ? col * SPACING_X : (COLS - 1 - col) * SPACING_X;
     const y = row * SPACING_Y;
-    return { id: item.id, type: item.type, position: { x, y }, data: item.data };
+    return { id: item.id, type: item.type, position: { x, y }, data: { ...item.data, isStart: item.isStart ?? false } };
   });
 
-  // Compute which tool_use_ids have a matching PostToolUse (completed)
-  const completedIds = new Set(
-    events
-      .filter(e => e.hook_event_name === "PostToolUse")
-      .map(e => (e as PostToolUseEvent).tool_use_id)
-  );
-
   const edges: Edge[] = graphItems.slice(0, -1).map((item, index) => {
-    // Extract tool_use_id from nodes whose id starts with "tool-"
-    const toolUseId = item.id.startsWith("tool-") ? item.id.slice(5) : null;
-    const isActive = toolUseId ? !completedIds.has(toolUseId) : false;
-
     return {
       id: `e-${item.id}__${graphItems[index + 1].id}`,
       source: item.id,
       target: graphItems[index + 1].id,
       type: "animated",
-      data: { kind: "dispatch", isActive },
+      data: { kind: "dispatch", isActive: true },
     };
   });
 
