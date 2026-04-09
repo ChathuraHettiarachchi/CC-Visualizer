@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, appendFileSync, readdirSync, statSync, readFileSync, unlinkSync } from "fs";
+import { mkdirSync, appendFileSync, readdirSync, statSync, readFileSync, unlinkSync } from "fs";
 import path from "path";
 import type { ClaudeEvent } from "@/lib/types";
 
-const SESSION_DIR = path.join(process.cwd(), ".cc-visualizer", "sessions");
+const SESSION_DIR = path.resolve(process.cwd(), ".cc-visualizer", "sessions");
 const MAX_SESSIONS = 50;
 
 export interface SessionMeta {
@@ -12,18 +12,33 @@ export interface SessionMeta {
   eventCount: number;
 }
 
-export function initSessionDir(): void {
-  if (!existsSync(SESSION_DIR)) {
-    mkdirSync(SESSION_DIR, { recursive: true });
+function resolveSessionPath(id: string): string {
+  const filePath = path.resolve(SESSION_DIR, `${id}.ndjson`);
+  if (!filePath.startsWith(SESSION_DIR + path.sep) && filePath !== SESSION_DIR) {
+    throw new Error("Invalid session id");
   }
+  return filePath;
+}
+
+export function initSessionDir(): void {
+  mkdirSync(SESSION_DIR, { recursive: true });
 }
 
 export function appendEvent(event: ClaudeEvent): void {
   try {
     initSessionDir();
-    const filePath = path.join(SESSION_DIR, `${event.session_id}.ndjson`);
+    const filePath = resolveSessionPath(event.session_id);
+    // Check if this is a new session file (to decide whether to prune)
+    let isNewFile = false;
+    try {
+      statSync(filePath);
+    } catch {
+      isNewFile = true;
+    }
     appendFileSync(filePath, JSON.stringify(event) + "\n", "utf8");
-    pruneOldSessions();
+    if (isNewFile) {
+      pruneOldSessions();
+    }
   } catch (err) {
     console.warn("[session-store] Failed to append event:", err);
   }
@@ -36,12 +51,13 @@ export function listSessions(): SessionMeta[] {
     const metas: SessionMeta[] = [];
     for (const file of files) {
       const filePath = path.join(SESSION_DIR, file);
-      const stat = statSync(filePath);
-      const content = readFileSync(filePath, "utf8");
-      const lines = content.trim().split("\n").filter(Boolean);
-      if (lines.length === 0) continue;
       try {
+        const stat = statSync(filePath);
+        const content = readFileSync(filePath, "utf8");
+        const lines = content.trim().split("\n").filter(Boolean);
+        if (lines.length === 0) continue;
         const firstEvent = JSON.parse(lines[0]) as ClaudeEvent;
+        if (typeof firstEvent.timestamp !== "number") continue;
         metas.push({
           id: file.replace(".ndjson", ""),
           startTime: firstEvent.timestamp,
@@ -59,9 +75,16 @@ export function listSessions(): SessionMeta[] {
 }
 
 export function loadSession(id: string): ClaudeEvent[] {
-  const filePath = path.join(SESSION_DIR, `${id}.ndjson`);
-  if (!existsSync(filePath)) throw new Error(`Session not found: ${id}`);
-  const content = readFileSync(filePath, "utf8");
+  const filePath = resolveSessionPath(id);
+  let content: string;
+  try {
+    content = readFileSync(filePath, "utf8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Session not found: ${id}`);
+    }
+    throw err;
+  }
   const result: ClaudeEvent[] = [];
   for (const line of content.trim().split("\n").filter(Boolean)) {
     try {
@@ -74,9 +97,15 @@ export function loadSession(id: string): ClaudeEvent[] {
 }
 
 export function deleteSession(id: string): void {
-  const filePath = path.join(SESSION_DIR, `${id}.ndjson`);
-  if (!existsSync(filePath)) throw new Error(`Session not found: ${id}`);
-  unlinkSync(filePath);
+  const filePath = resolveSessionPath(id);
+  try {
+    unlinkSync(filePath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Session not found: ${id}`);
+    }
+    throw err;
+  }
 }
 
 function pruneOldSessions(): void {
