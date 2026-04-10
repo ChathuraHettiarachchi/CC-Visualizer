@@ -10,7 +10,9 @@ npx cc-visualizer
 
 ## Demo
 
-<video src="media/video.webm" controls width="100%"></video>
+▶️ **Watch the full video:** https://youtu.be/q-42nU3ZMyo  
+
+![video](https://github.com/user-attachments/assets/5db9c827-35f6-4f75-adbb-46ea2bf0f48f)
 
 ---
 
