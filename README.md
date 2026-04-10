@@ -8,6 +8,12 @@ npx cc-visualizer
 
 ---
 
+## Demo
+
+<video src="media/demo.m4v" controls width="100%"></video>
+
+---
+
 ## Why does this exist?
 
 Two reasons.
