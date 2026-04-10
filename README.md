@@ -10,7 +10,7 @@ npx cc-visualizer
 
 ## Demo
 
-<video src="media/video.mebm" controls width="100%"></video>
+<video src="media/video.webm" controls width="100%"></video>
 
 ---
 
