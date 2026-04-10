@@ -49,10 +49,15 @@ if (HELP) {
 // ── Hook management ──────────────────────────────────────────────────────────
 
 const HOOK_EVENTS  = ['PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop'];
-const HOOK_MARKER  = '/api/hooks';  // identifies our hooks
+const HOOK_MARKER         = '/api/hooks';         // identifies our event hooks
+const SESSION_START_MARKER = 'cc-visualizer --port'; // identifies our SessionStart hook
 
 function hookCommand(port) {
   return `curl -sf -X POST http://localhost:${port}/api/hooks -H 'Content-Type: application/json' --data-binary @- --max-time 2 2>/dev/null || true`;
+}
+
+function sessionStartCommand(port) {
+  return `nc -z localhost ${port} 2>/dev/null || (nohup npx cc-visualizer --port=${port} --no-open >> /tmp/cc-visualizer.log 2>&1 &)`;
 }
 
 function settingsPath() {
@@ -73,30 +78,42 @@ function writeSettings(s) {
 }
 
 function isOurHook(cmd) { return typeof cmd === 'string' && cmd.includes(HOOK_MARKER); }
+function isOurSessionStartHook(cmd) { return typeof cmd === 'string' && cmd.includes(SESSION_START_MARKER); }
 
 function installHooks(port) {
   const settings = readSettings();
   settings.hooks = settings.hooks ?? {};
-  const cmd = hookCommand(port);
 
+  // ── Event hooks (PreToolUse, PostToolUse, etc.) ──────────────────────────
+  const cmd = hookCommand(port);
   for (const event of HOOK_EVENTS) {
     const entries = settings.hooks[event] ?? [];
-
-    // Find existing cc-visualizer entry (any port)
     const existing = entries.find(e =>
       Array.isArray(e.hooks) && e.hooks.some(h => isOurHook(h.command))
     );
-
     if (existing) {
-      // Update port in-place
       existing.hooks = existing.hooks.map(h =>
         isOurHook(h.command) ? { ...h, command: cmd } : h
       );
     } else {
-      // Append a new entry so we don't displace existing hooks
       entries.push({ matcher: '', hooks: [{ type: 'command', command: cmd }] });
       settings.hooks[event] = entries;
     }
+  }
+
+  // ── SessionStart hook — auto-start server on Claude launch ───────────────
+  const ssCmd = sessionStartCommand(port);
+  const ssEntries = settings.hooks['SessionStart'] ?? [];
+  const ssExisting = ssEntries.find(e =>
+    Array.isArray(e.hooks) && e.hooks.some(h => isOurSessionStartHook(h.command))
+  );
+  if (ssExisting) {
+    ssExisting.hooks = ssExisting.hooks.map(h =>
+      isOurSessionStartHook(h.command) ? { ...h, command: ssCmd } : h
+    );
+  } else {
+    ssEntries.push({ matcher: '', hooks: [{ type: 'command', command: ssCmd }] });
+    settings.hooks['SessionStart'] = ssEntries;
   }
 
   writeSettings(settings);
@@ -106,10 +123,11 @@ function uninstallHooks() {
   const settings = readSettings();
   if (!settings.hooks) { console.log('  No Claude hooks found.'); return; }
 
-  for (const event of HOOK_EVENTS) {
+  for (const event of [...HOOK_EVENTS, 'SessionStart']) {
     if (!settings.hooks[event]) continue;
+    const isOurs = event === 'SessionStart' ? isOurSessionStartHook : isOurHook;
     settings.hooks[event] = settings.hooks[event]
-      .map(e => ({ ...e, hooks: (e.hooks ?? []).filter(h => !isOurHook(h.command ?? '')) }))
+      .map(e => ({ ...e, hooks: (e.hooks ?? []).filter(h => !isOurs(h.command ?? '')) }))
       .filter(e => e.hooks.length > 0);
     if (settings.hooks[event].length === 0) delete settings.hooks[event];
   }
@@ -190,7 +208,8 @@ if (UNINSTALL) {
 if (!NO_HOOKS) {
   installHooks(PORT);
   console.log(`  ✓ Claude hooks installed → http://localhost:${PORT}/api/hooks`);
-  console.log(`    (PreToolUse, PostToolUse, Notification, Stop, SubagentStop)\n`);
+  console.log(`    (PreToolUse, PostToolUse, Notification, Stop, SubagentStop)`);
+  console.log(`  ✓ SessionStart hook installed — server auto-starts on Claude launch\n`);
 }
 
 console.log(`  Starting server on port ${PORT}…\n`);
