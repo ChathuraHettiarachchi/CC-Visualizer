@@ -1,6 +1,6 @@
 {
   "name": "cc-visualizer",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Real-time Claude Code session visualizer — 3D graph of tool calls, subagents, and events",
   "keywords": ["claude", "claude-code", "ai", "visualizer", "developer-tools"],
   "repository": "github:chettiarachchi/cc-visualizer",

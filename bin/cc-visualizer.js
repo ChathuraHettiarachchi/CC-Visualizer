@@ -57,7 +57,7 @@ function hookCommand(port) {
 }
 
 function sessionStartCommand(port) {
-  return `nc -z localhost ${port} 2>/dev/null || (nohup npx cc-visualizer --port=${port} --no-open >> /tmp/cc-visualizer.log 2>&1 &)`;
+  return `nc -z localhost ${port} 2>/dev/null || (nohup npx cc-visualizer --port=${port} --no-open >> /tmp/cc-visualizer.log 2>&1 &); echo "cc-visualizer → http://localhost:${port}"`;
 }
 
 function settingsPath() {
