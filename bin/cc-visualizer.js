@@ -16,7 +16,7 @@ function option(name, def) {
   return arg ? arg.split('=').slice(1).join('=') : def;
 }
 
-const PORT    = parseInt(option('--port', process.env.PORT ?? '3773'), 10);
+const PORT    = parseInt(option('--port', process.env.PORT ?? '7331'), 10);
 const NO_OPEN = flag('--no-open');
 const NO_HOOKS= flag('--no-hooks');
 const UNINSTALL = flag('--uninstall') || flag('--uninstall-hooks');
@@ -32,7 +32,7 @@ if (HELP) {
     npx cc-visualizer [options]
 
   Options:
-    --port=<n>         Port to run on (default: 3773)
+    --port=<n>         Port to run on (default: 7331)
     --no-open          Don't open the browser automatically
     --no-hooks         Skip Claude hook installation
     --uninstall        Remove cc-visualizer hooks from Claude settings and exit
